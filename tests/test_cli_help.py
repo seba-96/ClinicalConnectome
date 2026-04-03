@@ -12,7 +12,7 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("--participant-id-map", help_text)
         self.assertIn("original_participant_id", help_text)
         self.assertIn("bundled template", help_text)
-        self.assertIn("--source-dir", help_text)
+        self.assertIn("source_dir", help_text)
 
 
 if __name__ == "__main__":

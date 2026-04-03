@@ -36,16 +36,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Examples:\n"
-            "  bids-converter --source-dir ./input --target-dir ./output\n"
-            "  bids-converter --source-dir ./input --target-dir ./output --symlink-source-files\n"
-            "  bids-converter --source-dir ./input --target-dir ./output \\\n"
+            "  bids-converter ./input ./output\n"
+            "  bids-converter ./input ./output --symlink-source-files\n"
+            "  bids-converter ./input ./output \\\n"
             "    --missing-json-fields-file ./missing_json_fields.py\n"
         ),
     )
 
     parser.set_defaults(copy_source_files=True, collapse_subject_id=True)
-    parser.add_argument("--source-dir", type=Path, required=True, help="Input folder to convert.")
-    parser.add_argument("--target-dir", type=Path, required=True, help="Output BIDS-ready folder.")
+    parser.add_argument("source_dir", type=Path, help="Input folder to convert.")
+    parser.add_argument("target_dir", type=Path, help="Output BIDS-ready folder.")
     parser.add_argument(
         "--missing-json-fields-file",
         type=Path,
