@@ -15,10 +15,22 @@ The repository already includes:
 
 ## Clone and install
 
+Use a virtual environment to run the app (recommended and expected for this project).
+
+Python 3.10+ is required.
+
 ```bash
-git clone https://github.com/<your-org>/ClinicalConnectome.git
+git clone https://github.com/sebacine-96/ClinicalConnectome.git
 cd ClinicalConnectome
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
+```
+
+On Windows (PowerShell), activate with:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
 ```
 
 ## Quick start
