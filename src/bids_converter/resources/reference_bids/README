@@ -1,0 +1,3 @@
+ClinicalConnectome bundled reference BIDS top-level metadata files.
+Override these files by passing --reference-bids-root.
+

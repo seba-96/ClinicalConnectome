@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bids-converter"
+version = "0.1.0"
+description = "CLI utility to convert source datasets into BIDS-ready folder structures"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ClinicalConnectome contributors" }]
+keywords = ["bids", "neuroimaging", "converter", "clinicalconnectome"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+bids-converter = "bids_converter.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bids_converter = ["resources/*", "resources/reference_bids/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+

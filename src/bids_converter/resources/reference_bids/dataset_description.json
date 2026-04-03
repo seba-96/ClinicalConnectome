@@ -1,0 +1,9 @@
+{
+  "Name": "ClinicalConnectome Converted Dataset",
+  "BIDSVersion": "1.9.0",
+  "DatasetType": "raw",
+  "Authors": [
+    "ClinicalConnectome contributors"
+  ]
+}
+
