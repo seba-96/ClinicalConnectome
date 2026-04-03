@@ -1,6 +1,6 @@
 # ClinicalConnectome / bids_converter
 
-`bids_converter` converts a source dataset tree into a BIDS-ready directory while applying:
+`bids_converter` converts a source dataset from EBRAINS 2.4 Data Management Plan (DMP) to a BIDS-ready dataset while applying:
 
 - filename/path substitutions
 - subject ID normalization (`sub-` prefix + optional ID collapsing)
@@ -20,7 +20,7 @@ Use a virtual environment to run the app (recommended and expected for this proj
 Python 3.10+ is required.
 
 ```bash
-git clone https://github.com/sebacine-96/ClinicalConnectome.git
+git clone https://github.com/seba-96/ClinicalConnectome.git
 cd ClinicalConnectome
 python -m venv .venv
 source .venv/bin/activate
