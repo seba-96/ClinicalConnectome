@@ -5,8 +5,10 @@
 - filename/path substitutions
 - subject ID normalization (`sub-` prefix + optional ID collapsing)
 - JSON key renaming and default JSON field injection
+- automatic `IntendedFor` population in `fmap/*.json` from discovered BOLD/DWI NIfTI files
+- lesion mask relocation with explicit `--lesion-space` handling
 - bundled copy of top-level BIDS metadata files (overridable)
-- participant ID mapping TSV export when IDs are collapsed
+- original DMP participant IDs preserved in `participant_id_dmp` column
 
 The repository already includes:
 
@@ -52,92 +54,67 @@ To inspect full CLI help:
 bids-converter --help
 ```
 
-## Participant ID mapping TSV
+Missing JSON defaults also support subject numeric ranges. Example custom
+`missing_json_fields.py`:
 
-When `--collapse-subject-id` is enabled (default), the tool writes
-`participant_id_map.tsv` inside the target directory with:
-
-- `original_participant_id`
-- `bids_participant_id`
-
-Disable this output:
-
-```bash
-bids-converter ... ... --no-participant-id-map
+```python
+file_to_json_fields = {
+    "0001-0100": {
+        "Flair": {
+            "TaskName": "hello",
+        }
+    }
+}
 ```
 
-## T1w to MNI registration
-Install the project (includes required dependencies like `nipype`, `templateflow`, `nibabel`, and `numpy`):
+This injects fields only for files matching `Flair` in subjects with numeric
+ID suffixes in the inclusive range `0001-0100`.
+
+For fmap sidecars, `IntendedFor` auto-discovery is modality aware by filename:
+
+- if fmap JSON name contains `acq-fmri`, only BOLD targets are added
+- if fmap JSON name contains `acq-dwi`, only DWI targets are added
+- otherwise, both BOLD and DWI targets are considered
+
+You can force one modality globally for a conversion run:
 
 ```bash
-python -m pip install -e .
+bids-converter /path/to/source /path/to/output --intendedfor-fmri-only
+bids-converter /path/to/source /path/to/output --intendedfor-dwi-only
 ```
 
-Register all available subject T1w images in a BIDS dataset:
+If neither flag is set, the filename-based heuristic above is used.
+
+If lesion files are present in the source directory, you must provide:
 
 ```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni
+bids-converter /path/to/source /path/to/output --lesion-space T1w
 ```
 
-Run on selected subjects only:
+Lesion destination rules:
+
+- `--lesion-space T1w`: place masks in `sub-*/anat/` as `sub-XXX_lesion_roi.nii.gz`
+- other spaces (for example `MNI152NLin2009cAsym`): place masks in
+  `derivatives/manual_masks/sub-XXX/anat/` as
+  `sub-XXX_space-MNI152NLin2009cAsym_label-lesion_mask.nii.gz`
+
+If multiple lesion files are detected for the same subject, specify one selector
+to disambiguate which files should be treated as lesion masks:
 
 ```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni --subject 01 --subject 02
+bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-source-subdir manual_masks
+bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-pattern '*lesion*'
 ```
 
-Run a faster (lower-accuracy) preset:
+## Participant ID provenance
 
-```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni --fast
-```
-
-Run ANTs `RegistrationSynQuick` for a very fast registration path:
-
-```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni --transform-type RegistrationSynQuick
-```
-
-By default, registration runs ANTs N4 bias correction and BET brain extraction
-before the nonlinear registration step.
-
-Disable preprocessing steps if needed:
-
-```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni --no-n4-bias-correction --no-brain-extraction
-```
-
-Tune BET aggressiveness when brain extraction is enabled:
-
-```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni --bet-frac 0.35
-```
-
-Temporary preprocessing files (such as `n4_corrected.nii.gz`, `bet_brain.nii.gz`, and
-`moving_mask.nii.gz`) are created in the system temporary directory and automatically
-removed at the end of each subject run.
-
-To keep those files for debugging, use:
-
-```bash
-register-mni /path/to/bids /path/to/derivatives/ants_mni --keep-temp
-```
-
-When `--keep-temp` is used, each result entry includes `temp_dir` with the preserved path.
-
-Lesion masks are auto-detected in each `anat` folder using patterns like
-`{t1_base}_label-lesion_mask.nii.gz`. If found, they are used to mask registration
-and warped to template space with nearest-neighbor interpolation.
-
-Registration is executed via `nipype` ANTs interfaces, so ANTs binaries must be
-available on the target system `PATH`.
-
+When IDs are normalized, the original DMP ID is preserved in an additional
+`participant_id_dmp` column in both `participants.tsv` and `acquisitions.tsv`.
 
 ## Project layout
 
 - `src/bids_converter/cli.py`: command-line entrypoint and argument parsing
 - `src/bids_converter/converter.py`: conversion logic
-- `src/clinical_connectome/register_cli.py`: registration CLI entrypoint (`register-mni`)
-- `src/clinical_connectome/registration.py`: BIDS T1w discovery and ANTs/templateflow registration orchestration
 - `src/bids_converter/resources/`: bundled reference BIDS files and missing JSON defaults
 - `main.py`: compatibility launcher (`python main.py ...`)
 - `tests/`: minimal regression tests for CLI and mapping output

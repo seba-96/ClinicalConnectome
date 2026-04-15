@@ -50,7 +50,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--missing-json-fields-file",
         type=Path,
         help=(
-            "Optional Python file that defines file_to_json_fields = {glob: {key: value}}.\n"
+            "Optional Python file that defines file_to_json_fields.\n"
+            "Supported forms:\n"
+            "  {glob: {key: value}}\n"
+            "  {'0001-0100': {'Flair': {key: value}}}\n"
             "Matching JSON files receive missing default fields."
         ),
     )
@@ -103,7 +106,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--collapse-subject-id",
         dest="collapse_subject_id",
         action="store_true",
-        help="Collapse IDs like ST_UNIPD_0001 into STUNIPD0001 (default).",
+        help=(
+            "Collapse IDs like ST_UNIPD_0001 into STUNIPD0001 (default).\n"
+            "Original IDs are kept in participant_id_dmp in participants/acquisitions TSVs."
+        ),
     )
     parser.add_argument(
         "--no-collapse-subject-id",
@@ -119,18 +125,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip source files matching this glob on relative path or filename (repeatable).",
     )
     parser.add_argument(
-        "--participant-id-map",
-        default="participant_id_map.tsv",
+        "--lesion-space",
         help=(
-            "TSV filename written in target directory with columns:\n"
-            "original_participant_id and bids_participant_id.\n"
-            "Written only when IDs change and collapse is enabled."
+            "Space of lesion masks found in source data (required when lesion files are present).\n"
+            "Use T1w to store masks in sub/anat; any other space stores masks in derivatives/manual_masks/sub-*/anat."
         ),
     )
-    parser.add_argument(
-        "--no-participant-id-map",
+    lesion_selector_group = parser.add_mutually_exclusive_group()
+    lesion_selector_group.add_argument(
+        "--lesion-source-subdir",
+        help="Restrict lesion detection to files located in this source subdirectory.",
+    )
+    lesion_selector_group.add_argument(
+        "--lesion-pattern",
+        help="Restrict lesion detection to files matching this glob/path pattern (for example '*lesion*').",
+    )
+    intendedfor_group = parser.add_mutually_exclusive_group()
+    intendedfor_group.add_argument(
+        "--intendedfor-fmri-only",
         action="store_true",
-        help="Disable writing participant ID mapping TSV.",
+        help="Force IntendedFor discovery to include only BOLD targets for all fmap sidecars.",
+    )
+    intendedfor_group.add_argument(
+        "--intendedfor-dwi-only",
+        action="store_true",
+        help="Force IntendedFor discovery to include only DWI targets for all fmap sidecars.",
     )
     return parser
 
@@ -150,6 +169,12 @@ def main() -> None:
     if not args.skip_copy_top_level:
         reference_root = args.reference_bids_root or get_bundled_reference_bids_root()
 
+    intendedfor_modality_override = None
+    if args.intendedfor_fmri_only:
+        intendedfor_modality_override = "bold"
+    elif args.intendedfor_dwi_only:
+        intendedfor_modality_override = "dwi"
+
     result = create_bids_ready_tree(
         source_dir=args.source_dir,
         target_dir=args.target_dir,
@@ -162,8 +187,10 @@ def main() -> None:
         copy_source_files=args.copy_source_files,
         collapse_subject_id=args.collapse_subject_id,
         skip_source_patterns=args.skip_source_pattern,
-        write_participant_id_map=not args.no_participant_id_map,
-        participant_id_map_filename=args.participant_id_map,
+        intendedfor_modality_override=intendedfor_modality_override,
+        lesion_space=args.lesion_space,
+        lesion_source_subdir=args.lesion_source_subdir,
+        lesion_pattern=args.lesion_pattern,
     )
     print(json.dumps(result, indent=2, ensure_ascii=True))
 

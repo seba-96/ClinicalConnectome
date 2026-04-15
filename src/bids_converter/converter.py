@@ -19,6 +19,7 @@ DEFAULT_FILENAME_SUBSTITUTIONS: list[tuple[str, str]] = [
     (r"fMRI_rest_(run-[0-9]+)", r"task-rest_\1_bold"),
     (r"Flair", "FLAIR"),
     (r"lesion", "lesion_roi"),
+    (r"dMRI", "dwi"), # FIXME this should be changed based on the user
 ]
 
 DEFAULT_TOPLEVEL_COPY = [
@@ -34,7 +35,6 @@ DEFAULT_BIDSIGNORE_PATTERNS = [
     "*lesion_roi.nii.gz",
     "*lesion_roi.json",
     "acquisitions.tsv",
-    "participant_id_map.tsv",
 ]
 
 DEFAULT_JSON_FIELDS_CONVERSION = {
@@ -54,6 +54,8 @@ SOURCE_TOPLEVEL_ALLOWLIST = {
 SUBJECT_ID_WITH_PREFIX_PATTERN = re.compile(
     r"^(?P<prefix>sub-)?(?P<sid>[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*_[0-9]+)(?P<rest>(?:_.*)?)$"
 )
+SUBJECT_ID_RANGE_PATTERN = re.compile(r"^(?P<start>\d+)\s*-\s*(?P<end>\d+)$")
+INTENDEDFOR_SUFFIXES = ("_bold.nii.gz", "_dwi.nii.gz")
 
 
 def load_missing_json_fields(path: Path) -> dict[str, dict[str, Any]]:
@@ -107,6 +109,68 @@ def _matching_missing_fields(relative_path: str, missing_rules: dict[str, dict[s
     for pattern, fields in missing_rules.items():
         if fnmatch.fnmatch(relative_path, pattern):
             merged.update(fields)
+    return merged
+
+
+def _parse_subject_id_range(rule_key: str) -> tuple[int, int] | None:
+    match = SUBJECT_ID_RANGE_PATTERN.fullmatch(rule_key.strip())
+    if not match:
+        return None
+    start = int(match.group("start"))
+    end = int(match.group("end"))
+    if start > end:
+        return None
+    return (start, end)
+
+
+def _extract_subject_numeric_id(relative_paths: list[str]) -> int | None:
+    for relative_path in relative_paths:
+        for token in Path(relative_path).parts:
+            if token.startswith("sub-"):
+                match = re.search(r"(\d+)(?!.*\d)", token[4:])
+                if match:
+                    return int(match.group(1))
+            normalized_match = SUBJECT_ID_WITH_PREFIX_PATTERN.fullmatch(token)
+            if normalized_match:
+                sid = normalized_match.group("sid")
+                match = re.search(r"(\d+)(?!.*\d)", sid)
+                if match:
+                    return int(match.group(1))
+    return None
+
+
+def _matches_modality_rule(relative_path: str, rule_pattern: str) -> bool:
+    rel_lower = relative_path.lower()
+    name_lower = Path(relative_path).name.lower()
+    pattern_lower = rule_pattern.lower()
+
+    if any(char in rule_pattern for char in "*?[]"):
+        return fnmatch.fnmatch(rel_lower, pattern_lower) or fnmatch.fnmatch(name_lower, pattern_lower)
+
+    return pattern_lower in rel_lower or pattern_lower in name_lower
+
+
+def _matching_range_missing_fields(relative_paths: list[str], missing_rules: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    subject_id = _extract_subject_numeric_id(relative_paths)
+    if subject_id is None:
+        return merged
+
+    for rule_key, modality_rules in missing_rules.items():
+        parsed_range = _parse_subject_id_range(rule_key)
+        if parsed_range is None or not isinstance(modality_rules, dict):
+            continue
+        start, end = parsed_range
+        if not (start <= subject_id <= end):
+            continue
+
+        for modality_pattern, fields in modality_rules.items():
+            if not isinstance(fields, dict):
+                continue
+            modality_pattern_str = str(modality_pattern)
+            if any(_matches_modality_rule(relative_path, modality_pattern_str) for relative_path in relative_paths):
+                merged.update(fields)
+
     return merged
 
 
@@ -165,7 +229,7 @@ def _build_transformed_relative_path(
 def _normalize_tsv_participant_id(
     path: Path,
     collapse_subject_id: bool = False,
-    mapping: dict[str, str] | None = None,
+    dmp_column_name: str = "participant_id_dmp",
 ) -> bool:
     if not path.exists() or path.suffix.lower() != ".tsv":
         return False
@@ -179,10 +243,19 @@ def _normalize_tsv_participant_id(
         return False
 
     changed = False
+    if dmp_column_name not in fields:
+        fields = [*fields, dmp_column_name]
+        changed = True
+
     for row in rows:
         participant_id = (row.get("participant_id") or "").strip()
         if not participant_id:
             continue
+
+        original_participant_id = (row.get(dmp_column_name) or "").strip()
+        if not original_participant_id:
+            row[dmp_column_name] = participant_id
+            changed = True
 
         normalized = normalize_subject_token(
             participant_id,
@@ -191,8 +264,6 @@ def _normalize_tsv_participant_id(
         )
         if normalized != participant_id:
             row["participant_id"] = normalized
-            if mapping is not None:
-                mapping[participant_id] = normalized
             changed = True
 
     if changed:
@@ -309,20 +380,264 @@ def _should_skip_source_file(rel_path: Path, skip_patterns: list[str]) -> bool:
     return False
 
 
-def _write_participant_id_map_tsv(target_dir: Path, mapping: dict[str, str], filename: str) -> bool:
-    if not mapping:
+def _has_lesion_files(
+    source_dir: Path,
+    lesion_source_subdir: str | None = None,
+    lesion_pattern: str | None = None,
+) -> bool:
+    return bool(
+        _find_lesion_files(
+            source_dir,
+            lesion_source_subdir=lesion_source_subdir,
+            lesion_pattern=lesion_pattern,
+        )
+    )
+
+
+def _is_lesion_related_file(
+    rel_path: Path,
+    lesion_source_subdir: str | None = None,
+    lesion_pattern: str | None = None,
+) -> bool:
+    rel_posix = rel_path.as_posix().lower()
+    if lesion_source_subdir:
+        normalized_subdir = lesion_source_subdir.strip().strip("/").lower()
+        if normalized_subdir:
+            parts = [part.lower() for part in rel_path.parts[:-1]]
+            if normalized_subdir not in parts and f"/{normalized_subdir}/" not in f"/{rel_posix}/":
+                return False
+
+    name = rel_path.name.lower()
+    if lesion_pattern:
+        if not fnmatch.fnmatch(rel_posix, lesion_pattern.lower()) and lesion_pattern.lower() not in rel_posix:
+            return False
+    elif "lesion" not in name:
         return False
 
-    output_path = target_dir / filename
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    return name.endswith(".nii.gz") or name.endswith(".nii") or name.endswith(".json")
 
-    with output_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
-        writer.writerow(["original_participant_id", "bids_participant_id"])
-        for original in sorted(mapping):
-            writer.writerow([original, mapping[original]])
 
-    return True
+def _find_lesion_files(
+    source_dir: Path,
+    lesion_source_subdir: str | None = None,
+    lesion_pattern: str | None = None,
+) -> list[Path]:
+    found: list[Path] = []
+    for src_path in sorted(source_dir.rglob("*")):
+        if not src_path.is_file():
+            continue
+        rel_path = src_path.relative_to(source_dir)
+        if _is_lesion_related_file(
+            rel_path,
+            lesion_source_subdir=lesion_source_subdir,
+            lesion_pattern=lesion_pattern,
+        ):
+            found.append(rel_path)
+    return found
+
+
+def _subjects_with_multiple_lesions(lesion_relative_paths: list[Path]) -> set[str]:
+    counts: dict[str, int] = {}
+    for rel_path in lesion_relative_paths:
+        subject = _extract_subject_label(rel_path)
+        if subject is None:
+            continue
+        counts[subject] = counts.get(subject, 0) + 1
+    return {subject for subject, count in counts.items() if count > 1}
+
+
+def _extract_subject_label(rel_path: Path) -> str | None:
+    subject = _extract_bids_entity(rel_path, "sub-")
+    if subject is not None:
+        return subject
+    match = re.search(r"(sub-[A-Za-z0-9]+)", rel_path.name)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _path_suffix(path: Path) -> str:
+    if path.name.endswith(".nii.gz"):
+        return ".nii.gz"
+    return path.suffix
+
+
+def _safe_descriptor_token(filename: str) -> str:
+    stem = filename
+    for suffix in (".nii.gz", ".nii", ".json"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    stem = re.sub(r"[^A-Za-z0-9]+", "-", stem).strip("-").lower()
+    return stem or "lesion"
+
+
+def _lesion_destination_relative_path(
+    source_rel_path: Path,
+    transformed_rel_path: Path,
+    lesion_space: str,
+    multiple_for_subject: bool = False,
+) -> Path:
+    subject = _extract_subject_label(transformed_rel_path) or _extract_subject_label(source_rel_path)
+    if subject is None:
+        raise ValueError(f"Could not infer subject ID for lesion file: {source_rel_path}")
+
+    suffix = _path_suffix(transformed_rel_path)
+    normalized_space = lesion_space.strip()
+    if not normalized_space:
+        raise ValueError("lesion_space cannot be empty when lesion files are present")
+
+    desc_entity = ""
+    if multiple_for_subject:
+        desc_entity = f"_desc-{_safe_descriptor_token(source_rel_path.name)}"
+
+    if normalized_space.lower() == "t1w":
+        filename = f"{subject}{desc_entity}_lesion_roi{suffix}"
+        return Path(subject) / "anat" / filename
+
+    filename = f"{subject}_space-{normalized_space}{desc_entity}_label-lesion_mask{suffix}"
+    return Path("derivatives") / "manual_masks" / subject / "anat" / filename
+
+
+def _extract_bids_entity(rel_path: Path, entity_prefix: str) -> str | None:
+    for token in rel_path.parts:
+        if token.startswith(entity_prefix):
+            return token
+    return None
+
+
+def _collect_intendedfor_candidates(target_dir: Path) -> dict[tuple[str, str | None], list[str]]:
+    collected: dict[tuple[str, str | None], set[str]] = {}
+    for nii_path in sorted(target_dir.rglob("*.nii.gz")):
+        rel_path = nii_path.relative_to(target_dir)
+        name = rel_path.name
+        if not name.endswith(INTENDEDFOR_SUFFIXES):
+            continue
+
+        subject = _extract_bids_entity(rel_path, "sub-")
+        if subject is None:
+            continue
+
+        subject_rel = _to_subject_relative_path(rel_path)
+        if subject_rel is None:
+            continue
+
+        session = _extract_bids_entity(rel_path, "ses-")
+        collected.setdefault((subject, session), set()).add(subject_rel)
+
+    return {key: sorted(values) for key, values in collected.items()}
+
+
+def _matching_intendedfor_entries(
+    rel_json_path: Path,
+    intendedfor_candidates: dict[tuple[str, str | None], list[str]],
+    intendedfor_modality_override: str | None = None,
+) -> list[str]:
+    subject = _extract_bids_entity(rel_json_path, "sub-")
+    if subject is None:
+        return []
+
+    session = _extract_bids_entity(rel_json_path, "ses-")
+    if session is not None:
+        entries = list(intendedfor_candidates.get((subject, session), []))
+    else:
+        merged: set[str] = set()
+        for (candidate_subject, _candidate_session), entries in intendedfor_candidates.items():
+            if candidate_subject == subject:
+                merged.update(entries)
+        entries = sorted(merged)
+
+    desired_modality = intendedfor_modality_override or _desired_intendedfor_modality(rel_json_path.name)
+    if desired_modality is None:
+        return entries
+    return [entry for entry in entries if entry.endswith(f"_{desired_modality}.nii.gz")]
+
+
+def _desired_intendedfor_modality(fmap_json_name: str) -> str | None:
+    name = fmap_json_name.lower()
+    has_fmri = "acq-fmri" in name
+    has_dwi = "acq-dwi" in name
+    if has_fmri and not has_dwi:
+        return "bold"
+    if has_dwi and not has_fmri:
+        return "dwi"
+    return None
+
+
+def _to_subject_relative_path(rel_path: Path) -> str | None:
+    parts = list(rel_path.parts)
+    for index, token in enumerate(parts):
+        if token.startswith("sub-"):
+            if index + 1 >= len(parts):
+                return None
+            return Path(*parts[index + 1 :]).as_posix()
+    return None
+
+
+def _normalize_intendedfor_values(value: Any, subject: str) -> list[str]:
+    if isinstance(value, str):
+        candidates = [value]
+    elif isinstance(value, list):
+        candidates = [item for item in value if isinstance(item, str)]
+    else:
+        candidates = []
+
+    normalized: list[str] = []
+    subject_prefix = f"{subject}/"
+    for candidate in candidates:
+        path_value = candidate.replace("\\", "/").lstrip("/")
+        if path_value.startswith(subject_prefix):
+            path_value = path_value[len(subject_prefix) :]
+        if path_value and path_value not in normalized:
+            normalized.append(path_value)
+
+    return normalized
+
+
+def _populate_fmap_intendedfor(target_dir: Path, intendedfor_modality_override: str | None = None) -> int:
+    intendedfor_candidates = _collect_intendedfor_candidates(target_dir)
+    if not intendedfor_candidates:
+        return 0
+
+    updated = 0
+    for json_path in sorted(target_dir.rglob("*.json")):
+        rel_path = json_path.relative_to(target_dir)
+        if "fmap" not in rel_path.parts:
+            continue
+
+        subject = _extract_bids_entity(rel_path, "sub-")
+        if subject is None:
+            continue
+
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            continue
+
+        discovered = _matching_intendedfor_entries(
+            rel_path,
+            intendedfor_candidates,
+            intendedfor_modality_override=intendedfor_modality_override,
+        )
+        if not discovered:
+            continue
+
+        existing = _normalize_intendedfor_values(payload.get("IntendedFor"), subject)
+        merged = [*existing]
+        for entry in discovered:
+            if entry not in merged:
+                merged.append(entry)
+
+        if merged == existing:
+            continue
+
+        payload["IntendedFor"] = merged
+        json_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+        updated += 1
+
+    return updated
 
 
 def create_bids_ready_tree(
@@ -338,8 +653,10 @@ def create_bids_ready_tree(
     copy_source_files: bool = True,
     collapse_subject_id: bool = True,
     skip_source_patterns: list[str] | None = None,
-    write_participant_id_map: bool = True,
-    participant_id_map_filename: str = "participant_id_map.tsv",
+    intendedfor_modality_override: str | None = None,
+    lesion_space: str | None = None,
+    lesion_source_subdir: str | None = None,
+    lesion_pattern: str | None = None,
 ) -> dict[str, int]:
     source_dir = source_dir.expanduser().resolve()
     target_dir = target_dir.expanduser().resolve()
@@ -348,9 +665,25 @@ def create_bids_ready_tree(
     json_fields_conv = json_fields_conv or DEFAULT_JSON_FIELDS_CONVERSION
     substitutions = substitutions or []
     skip_source_patterns = skip_source_patterns or []
+    if intendedfor_modality_override not in (None, "bold", "dwi"):
+        raise ValueError("intendedfor_modality_override must be one of: None, 'bold', 'dwi'")
 
     if not source_dir.is_dir():
         raise NotADirectoryError(f"Source directory does not exist: {source_dir}")
+
+    lesion_relative_paths = _find_lesion_files(
+        source_dir,
+        lesion_source_subdir=lesion_source_subdir,
+        lesion_pattern=lesion_pattern,
+    )
+    if lesion_relative_paths and (lesion_space is None or not lesion_space.strip()):
+        raise ValueError("Lesion files detected in source_dir: please specify --lesion-space")
+    multiple_lesion_subjects = _subjects_with_multiple_lesions(lesion_relative_paths)
+    if multiple_lesion_subjects and not (lesion_source_subdir or lesion_pattern):
+        raise ValueError(
+            "Multiple lesion files detected for at least one subject. "
+            "Specify --lesion-source-subdir or --lesion-pattern."
+        )
 
     if target_dir.exists() and any(target_dir.iterdir()) and not overwrite:
         raise FileExistsError(f"Target directory is not empty: {target_dir}")
@@ -379,11 +712,10 @@ def create_bids_ready_tree(
         "bidsignore_updated": 0,
         "participants_json_updated": 0,
         "skipped_source_files": 0,
-        "participant_id_map_written": 0,
+        "intendedfor_updated": 0,
     }
 
     emitted_paths: set[Path] = set()
-    participant_id_mapping: dict[str, str] = {}
 
     for src_path in sorted(source_dir.rglob("*")):
         rel_path = src_path.relative_to(source_dir)
@@ -404,9 +736,26 @@ def create_bids_ready_tree(
             add_sub_prefix,
             collapse_subject_id,
         )
-        dst_path = target_dir / transformed_rel_path
+        final_rel_path = transformed_rel_path
+        if src_path.is_file() and _is_lesion_related_file(
+            rel_path,
+            lesion_source_subdir=lesion_source_subdir,
+            lesion_pattern=lesion_pattern,
+        ):
+            if lesion_space is None:
+                raise ValueError("Lesion files detected in source_dir: please specify --lesion-space")
+            lesion_subject = _extract_subject_label(transformed_rel_path) or _extract_subject_label(rel_path)
+            multiple_for_subject = bool(lesion_subject and lesion_subject in multiple_lesion_subjects)
+            final_rel_path = _lesion_destination_relative_path(
+                source_rel_path=rel_path,
+                transformed_rel_path=transformed_rel_path,
+                lesion_space=lesion_space,
+                multiple_for_subject=multiple_for_subject,
+            )
 
-        if transformed_rel_path != rel_path:
+        dst_path = target_dir / final_rel_path
+
+        if final_rel_path != rel_path:
             stats["renamed_paths"] += 1
 
         if dst_path in emitted_paths:
@@ -434,8 +783,10 @@ def create_bids_ready_tree(
             payload = json.loads(src_path.read_text(encoding="utf-8"))
             if isinstance(payload, dict):
                 renamed_payload = _rename_json_keys(payload, json_fields_conv, src_path)
-                defaults = _matching_missing_fields(rel_path.as_posix(), missing_json_fields)
-                defaults.update(_matching_missing_fields(transformed_rel_path.as_posix(), missing_json_fields))
+                relative_paths = [rel_path.as_posix(), transformed_rel_path.as_posix()]
+                defaults = _matching_missing_fields(relative_paths[0], missing_json_fields)
+                defaults.update(_matching_missing_fields(relative_paths[1], missing_json_fields))
+                defaults.update(_matching_range_missing_fields(relative_paths, missing_json_fields))
                 for key, value in defaults.items():
                     renamed_payload.setdefault(key, value)
             else:
@@ -459,7 +810,6 @@ def create_bids_ready_tree(
     if participants_target.exists() and _normalize_tsv_participant_id(
         participants_target,
         collapse_subject_id=collapse_subject_id,
-        mapping=participant_id_mapping,
     ):
         stats["participants_normalized"] += 1
 
@@ -467,7 +817,6 @@ def create_bids_ready_tree(
     if acquisitions_target.exists() and _normalize_tsv_participant_id(
         acquisitions_target,
         collapse_subject_id=collapse_subject_id,
-        mapping=participant_id_mapping,
     ):
         stats["acquisitions_normalized"] += 1
 
@@ -484,13 +833,11 @@ def create_bids_ready_tree(
         if participants_target.exists() and _normalize_tsv_participant_id(
             participants_target,
             collapse_subject_id=collapse_subject_id,
-            mapping=participant_id_mapping,
         ):
             stats["participants_normalized"] += 1
         if acquisitions_target.exists() and _normalize_tsv_participant_id(
             acquisitions_target,
             collapse_subject_id=collapse_subject_id,
-            mapping=participant_id_mapping,
         ):
             stats["acquisitions_normalized"] += 1
 
@@ -500,12 +847,11 @@ def create_bids_ready_tree(
     if _sync_participants_json_with_tsv(target_dir):
         stats["participants_json_updated"] += 1
 
-    if collapse_subject_id and write_participant_id_map and _write_participant_id_map_tsv(
+
+    stats["intendedfor_updated"] += _populate_fmap_intendedfor(
         target_dir,
-        participant_id_mapping,
-        participant_id_map_filename,
-    ):
-        stats["participant_id_map_written"] += 1
+        intendedfor_modality_override=intendedfor_modality_override,
+    )
 
     return stats
 
