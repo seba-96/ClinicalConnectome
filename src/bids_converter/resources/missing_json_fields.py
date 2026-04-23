@@ -8,8 +8,8 @@ file_to_json_fields = {
     # "sub-*/func/*_bold.json": {"TaskName": "rest"},
     #
     # Subject-range example (numeric subject suffix 0001-0100 only):
-    # "0001-0100": {
-    #     "Flair": {"TaskName": "rest"},
-    # },
+    "0001-9999": {
+         "func": {"TaskName": "rest"},
+    },
 }
 

@@ -15,8 +15,10 @@ class MissingJsonFieldRangesTests(unittest.TestCase):
             dst = Path(dst_tmp) / "out"
 
             flair_json = src / "sub-0005" / "anat" / "sub-0005_Flair.json"
+            flair_nii = src / "sub-0005" / "anat" / "sub-0005_Flair.nii.gz"
             flair_json.parent.mkdir(parents=True)
             flair_json.write_text("{}\n", encoding="utf-8")
+            flair_nii.write_bytes(b"x")
 
             create_bids_ready_tree(
                 source_dir=src,
@@ -40,8 +42,10 @@ class MissingJsonFieldRangesTests(unittest.TestCase):
             dst = Path(dst_tmp) / "out"
 
             flair_json = src / "sub-0105" / "anat" / "sub-0105_Flair.json"
+            flair_nii = src / "sub-0105" / "anat" / "sub-0105_Flair.nii.gz"
             flair_json.parent.mkdir(parents=True)
             flair_json.write_text("{}\n", encoding="utf-8")
+            flair_nii.write_bytes(b"x")
 
             create_bids_ready_tree(
                 source_dir=src,
@@ -65,8 +69,10 @@ class MissingJsonFieldRangesTests(unittest.TestCase):
             dst = Path(dst_tmp) / "out"
 
             flair_json = src / "sub-0001" / "anat" / "sub-0001_FLAIR.json"
+            flair_nii = src / "sub-0001" / "anat" / "sub-0001_FLAIR.nii.gz"
             flair_json.parent.mkdir(parents=True)
             flair_json.write_text("{}\n", encoding="utf-8")
+            flair_nii.write_bytes(b"x")
 
             create_bids_ready_tree(
                 source_dir=src,

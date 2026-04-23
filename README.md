@@ -48,6 +48,29 @@ bids-converter \
   --missing-json-fields-file /path/to/missing_json_fields.py
 ```
 
+By default, the converter validates generated output with `bids-validator-deno`
+after conversion:
+
+```bash
+bids-converter \
+  /path/to/source \
+  /path/to/output
+```
+
+This runs `bids-validator-deno /path/to/output` and prints validator output
+directly to the terminal unchanged. The converter JSON output contains a compact
+`bids_validation` entry with command and return code. A non-zero validator exit
+code causes the CLI to exit with the same code.
+
+To skip validation for a run:
+
+```bash
+bids-converter \
+  /path/to/source \
+  /path/to/output \
+  --no-validate-bids
+```
+
 To inspect full CLI help:
 
 ```bash
@@ -105,6 +128,55 @@ to disambiguate which files should be treated as lesion masks:
 bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-source-subdir manual_masks
 bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-pattern '*lesion*'
 ```
+
+`--lesion-resample` now resamples each selected lesion to the sequence declared in
+its lesion space (for native spaces like `T1w`, `FLAIR`, `dwi`) and updates the
+same output mask file.
+
+To split integer-valued lesions (for example `1=core`, `2=edema`) into one binary
+mask per label:
+
+```bash
+bids-converter /path/to/source /path/to/output \
+  --lesion-space FLAIR \
+  --lesion-pattern '*space-FLAIR_les*' \
+  --lesion-split \
+  --lesion-split-label 1:core \
+  --lesion-split-label 2:edema \
+  --lesion-split-combined-desc edemacore
+```
+
+You can group multiple labels under the same desc (for example labels `1,2,3`
+as `core`, excluding label `4` by not mapping it):
+
+```bash
+bids-converter /path/to/source /path/to/output \
+  --lesion-space T1w \
+  --lesion-pattern '*lesion*' \
+  --lesion-split \
+  --lesion-split-label 1,2,3:core \
+  --lesion-split-primary-desc core
+```
+
+When split masks are used with `--lesion-space T1w`, exactly one split mask
+(`--lesion-split-primary-desc`) is kept in `sub-*/anat/`. All split masks are
+written in `derivatives/manual_masks/`, and the primary anat mask is duplicated
+there as well.
+
+For datasets with multiple lesion sources that need different options, use
+repeatable `--lesion-config` JSON objects (each can define `pattern`, `space`,
+`resample`, `split`, `split_labels`, `combined_desc`):
+
+```bash
+bids-converter /path/to/source /path/to/output \
+  --lesion-config '{"pattern":"*space-FLAIR_les*","space":"FLAIR","resample":true}' \
+  --lesion-config '{"pattern":"*space-MNI*","space":"MNI152NLin2009cAsym","split":true,"split_labels":{"1":"core","2":"edema"},"combined_desc":"edemacore"}'
+```
+
+By default the output tree is made read-only at the end of conversion; disable
+this behavior with `--no-target-read-only`.
+
+If the target directory already exists, it is removed before conversion starts.
 
 ## Participant ID provenance
 

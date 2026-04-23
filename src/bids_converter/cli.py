@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from pathlib import Path
 
 from .converter import (
@@ -25,6 +26,55 @@ def _parse_substitution_rule(value: str) -> tuple[str, str]:
     return pattern, replacement
 
 
+def _parse_lesion_split_label(value: str) -> tuple[list[int], str]:
+    if ":" not in value:
+        raise argparse.ArgumentTypeError(f"Invalid split label {value!r}. Use LABEL[,LABEL...]:DESC.")
+    raw_label, raw_desc = value.split(":", 1)
+    labels: list[int] = []
+    for token in [part for part in raw_label.replace("-", ",").split(",") if part.strip()]:
+        try:
+            label = int(token.strip())
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"Invalid split label key {token!r}. Use integers > 0.") from exc
+        if label <= 0:
+            raise argparse.ArgumentTypeError("Split label keys must be integers > 0.")
+        labels.append(label)
+    if not labels:
+        raise argparse.ArgumentTypeError("At least one split label key is required.")
+    desc = raw_desc.strip()
+    if not desc:
+        raise argparse.ArgumentTypeError("Split label description cannot be empty.")
+    return labels, desc
+
+
+def _parse_lesion_config_json(value: str) -> dict[str, object]:
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise argparse.ArgumentTypeError(f"Invalid lesion config JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise argparse.ArgumentTypeError("Each --lesion-config must be a JSON object.")
+    return payload
+
+
+def _run_bids_validator(target_dir: Path) -> dict[str, object]:
+    command = ["bids-validator-deno", str(target_dir)]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "Could not run bids-validator-deno. Install the dependency and ensure the executable is on PATH."
+        ) from exc
+
+    return {
+        "command": command,
+        "returncode": completed.returncode,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bids-converter",
@@ -43,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    parser.set_defaults(copy_source_files=True, collapse_subject_id=True)
+    parser.set_defaults(copy_source_files=True, collapse_subject_id=True, validate_bids=True)
     parser.add_argument("source_dir", type=Path, help="Input folder to convert.")
     parser.add_argument("target_dir", type=Path, help="Output BIDS-ready folder.")
     parser.add_argument(
@@ -125,10 +175,106 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip source files matching this glob on relative path or filename (repeatable).",
     )
     parser.add_argument(
+        "--validate-bids",
+        dest="validate_bids",
+        action="store_true",
+        help="Run bids-validator-deno against the generated target directory after conversion (default).",
+    )
+    parser.add_argument(
+        "--no-validate-bids",
+        dest="validate_bids",
+        action="store_false",
+        help="Skip bids-validator-deno validation after conversion.",
+    )
+    parser.add_argument(
         "--lesion-space",
         help=(
             "Space of lesion masks found in source data (required when lesion files are present).\n"
             "Use T1w to store masks in sub/anat; any other space stores masks in derivatives/manual_masks/sub-*/anat."
+        ),
+    )
+    parser.add_argument(
+        "--lesion-resample",
+        action="store_true",
+        help=(
+            "Resample lesions to the sequence in --lesion-space (native spaces only)."
+        ),
+    )
+    parser.add_argument(
+        "--lesion-split",
+        action="store_true",
+        help="Split integer-valued lesion masks into one binary output per label > 0.",
+    )
+    parser.add_argument(
+        "--lesion-split-label",
+        action="append",
+        type=_parse_lesion_split_label,
+        default=[],
+        metavar="LABELS:DESC",
+        help="Optional label mapping used with --lesion-split (repeatable), e.g. 1,2,3:core 4:edema.",
+    )
+    parser.add_argument(
+        "--lesion-split-combined-desc",
+        help="Also write a combined binary lesion mask (>0) with this desc entity, e.g. edemacore.",
+    )
+    parser.add_argument(
+        "--lesion-split-primary-desc",
+        help=(
+            "For split lesions in T1w space, choose which split desc remains in sub-*/anat. "
+            "Other split masks go to derivatives."
+        ),
+    )
+    parser.add_argument(
+        "--lesion-config",
+        action="append",
+        type=_parse_lesion_config_json,
+        default=[],
+        metavar="JSON",
+        help=(
+            "Repeatable lesion config as JSON object for per-file handling.\n"
+            "Example: '{\"pattern\":\"*space-FLAIR_les*\",\"space\":\"FLAIR\",\"resample\":true,"
+            "\"split\":true,\"split_labels\":{\"1\":\"core\",\"2\":\"edema\"},\"combined_desc\":\"edemacore\"}'"
+        ),
+    )
+    parser.add_argument(
+        "--target-read-only",
+        dest="target_read_only",
+        action="store_true",
+        help="Mark generated target directory as read-only at the end (default).",
+    )
+    parser.add_argument(
+        "--no-target-read-only",
+        dest="target_read_only",
+        action="store_false",
+        help="Do not change target directory permissions at the end.",
+    )
+    parser.add_argument(
+        "--figure-dir",
+        type=Path,
+        help=(
+            "Optional directory where 6-slice axial montage PNGs of all scans are written.\n"
+            "When --lesion-space T1w is used, lesion overlays on T1w are also saved here.\n"
+            "A subject-level HTML page embedding all generated figures is created for each subject."
+        ),
+    )
+    parser.add_argument(
+        "--fmap-fmri-pattern",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help=(
+            "Treat matching files currently under func/ as fieldmaps and move them to fmap/\n"
+            "while forcing filename entity acq-fmri (repeatable; supports substring or glob)."
+        ),
+    )
+    parser.add_argument(
+        "--fmap-dwi-pattern",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help=(
+            "Treat matching files currently under dwi/ as fieldmaps and move them to fmap/\n"
+            "while forcing filename entity acq-dwi (repeatable; supports substring or glob)."
         ),
     )
     lesion_selector_group = parser.add_mutually_exclusive_group()
@@ -151,6 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force IntendedFor discovery to include only DWI targets for all fmap sidecars.",
     )
+    parser.set_defaults(target_read_only=True)
     return parser
 
 
@@ -175,6 +322,11 @@ def main() -> None:
     elif args.intendedfor_dwi_only:
         intendedfor_modality_override = "dwi"
 
+    if args.lesion_config and (args.lesion_space or args.lesion_source_subdir or args.lesion_pattern):
+        parser.error("--lesion-config cannot be combined with --lesion-space/--lesion-source-subdir/--lesion-pattern")
+
+    lesion_split_label_recipe = args.lesion_split_label
+
     result = create_bids_ready_tree(
         source_dir=args.source_dir,
         target_dir=args.target_dir,
@@ -191,8 +343,26 @@ def main() -> None:
         lesion_space=args.lesion_space,
         lesion_source_subdir=args.lesion_source_subdir,
         lesion_pattern=args.lesion_pattern,
+        lesion_resample=args.lesion_resample,
+        lesion_configs=args.lesion_config,
+        lesion_split=args.lesion_split,
+        lesion_split_labels=lesion_split_label_recipe,
+        lesion_split_combined_desc=args.lesion_split_combined_desc,
+        lesion_split_primary_desc=args.lesion_split_primary_desc,
+        figure_dir=args.figure_dir,
+        fmap_fmri_patterns=args.fmap_fmri_pattern,
+        fmap_dwi_patterns=args.fmap_dwi_pattern,
+        make_target_read_only=args.target_read_only,
     )
+
+    if args.validate_bids:
+        validation_result = _run_bids_validator(args.target_dir)
+        result["bids_validation"] = validation_result
+
     print(json.dumps(result, indent=2, ensure_ascii=True))
+
+    if args.validate_bids and int(result["bids_validation"]["returncode"]) != 0:
+        raise SystemExit(int(result["bids_validation"]["returncode"]))
 
 
 if __name__ == "__main__":
