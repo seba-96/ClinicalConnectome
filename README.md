@@ -13,23 +13,41 @@ The `bids-converter` tool automates the tedious parts of dataset conversion and 
 - advanced lesion mask handling with `--lesion-space` routing
 - bundled copying of top-level reference BIDS metadata
 - data provenance preservation (original DMP participant IDs in `participant_id_dmp` column)
+- immediately makes output trees read-only (to stop accidental mutation)
+- automatic generation of montage figures via `nilearn` (if requested via `--figure-dir`)
 - immediate BIDS compliance validation with `bids-validator-deno`
 
 The repository already includes:
 
 - a bundled reference BIDS top-level template in `src/bids_converter/resources/reference_bids/`
-- a bundled default missing-fields module in `src/bids_converter/resources/missing_json_fields.py`
+- a bundled default missing-fields JSON configuration in `src/bids_converter/resources/missing_json_fields.json`
 
-## Clone and install
+## Where and how to run
 
-Use a virtual environment to run the app (recommended and expected for this project).
+This package can be run **locally** on your computer terminal, or on a **PHI. 
+If you are running it on PHI:
+1. Open a new Desktop in PHI.
+2. Open a `'MULTI'` terminal.
 
-Python 3.10+ is required.
+### Clone and install
+
+Run the following commands in your terminal to clone the repository and set up the virtual environment. Python 3.10+ and Git are required. 
 
 ```bash
 git clone https://github.com/seba-96/ClinicalConnectome.git
 cd ClinicalConnectome
 python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+### Updating the app
+
+To pull the latest changes and update the application via Git, drop into your project directory and run:
+
+```bash
+cd ClinicalConnectome
+git pull
 source .venv/bin/activate
 python -m pip install -e .
 ```
@@ -43,37 +61,31 @@ bids-converter \
 ```
 
 By default, the converter uses bundled reference files and bundled missing JSON defaults.
-You can override either one:
+You can pass custom defaults via an external JSON file or inline JSON string directly in the CLI:
 
 ```bash
 bids-converter \
   /path/to/source \
   /path/to/output \
   --reference-bids-root /path/to/reference_bids \
-  --missing-json-fields-file /path/to/missing_json_fields.py
+  --missing-json-fields '{"*FLAIR*": {"TaskName": "hello"}}'
 ```
 
-By default, the converter validates generated output with `bids-validator-deno`
-after conversion:
+If you don't need figure generation (or only want to clear existing default substitutions), you can modify the default behavior using flags:
 
 ```bash
-bids-converter \
-  /path/to/source \
-  /path/to/output
+bids-converter /path/to/source /path/to/output \
+  --no-figure-dir \
+  --clear-substitutions \
+  --substitute-pattern 'my_old_pattern=>my_new_pattern'
 ```
 
-This runs `bids-validator-deno /path/to/output` and prints validator output
-directly to the terminal unchanged. The converter JSON output contains a compact
-`bids_validation` entry with command and return code. A non-zero validator exit
-code causes the CLI to exit with the same code.
+By default, the converter validates generated output with `bids-validator-deno` after conversion. It also sets the output destination to read-only (`--target-read-only`).
 
 To skip validation for a run:
 
 ```bash
-bids-converter \
-  /path/to/source \
-  /path/to/output \
-  --no-validate-bids
+bids-converter /path/to/source /path/to/output --no-validate-bids
 ```
 
 To inspect full CLI help:
@@ -82,27 +94,23 @@ To inspect full CLI help:
 bids-converter --help
 ```
 
-Missing JSON defaults also support subject numeric ranges. Example custom
-`missing_json_fields.py`:
+### Inject missing JSON fields into an existing tree
 
-```python
-file_to_json_fields = {
-    "0001-0100": {
-        "Flair": {
-            "TaskName": "hello",
-        }
-    }
-}
+If you have an **already converted BIDS dataset** and simply want to retroactively inject missing JSON fields without repeating the entire conversion process, you can bypass `source_dir` requirements by providing `--inject-missing-json-only`:
+
+```bash
+bids-converter /path/to/existing_bids_output \
+  --inject-missing-json-only \
+  --missing-json-fields '{"0001-0100": {"FLAIR": {"TaskName": "rest"}}}'
 ```
 
-This injects fields only for files matching `Flair` in subjects with numeric
-ID suffixes in the inclusive range `0001-0100`.
+The above command skips conversion and directly targets `*.json` sidecars in your existing `/path/to/existing_bids_output` dataset.
+
+### IntendedFor Auto-Population
 
 For fmap sidecars, `IntendedFor` auto-discovery is modality aware by filename:
-
 - if fmap JSON name contains `acq-fmri`, only BOLD targets are added
 - if fmap JSON name contains `acq-dwi`, only DWI targets are added
-- otherwise, both BOLD and DWI targets are considered
 
 You can force one modality globally for a conversion run:
 
@@ -111,48 +119,29 @@ bids-converter /path/to/source /path/to/output --intendedfor-fmri-only
 bids-converter /path/to/source /path/to/output --intendedfor-dwi-only
 ```
 
-If neither flag is set, the filename-based heuristic above is used.
+### Lesion Rules and Redirection
 
-If lesion files are present in the source directory, you must provide:
+If lesion files are present in the source directory, you must provide `--lesion-space`.
 
 ```bash
 bids-converter /path/to/source /path/to/output --lesion-space T1w
 ```
 
-Lesion destination rules:
-
+**Lesion destination rules:**
 - `--lesion-space T1w`: place masks in `sub-*/anat/` as `sub-XXX_lesion_roi.nii.gz`
-- other spaces (for example `MNI152NLin2009cAsym`): place masks in
-  `derivatives/manual_masks/sub-XXX/anat/` as
-  `sub-XXX_space-MNI152NLin2009cAsym_label-lesion_mask.nii.gz`
+- `--lesion-space MNI152NLin2009cAsym` (or any other space): place masks in `derivatives/manual_masks/sub-XXX/anat/`. Even if the source file is located in an `anat/` source subfolder, specifying MNI bounds it to derivatives automatically.
 
-If multiple lesion files are detected for the same subject, specify one selector
-to disambiguate which files should be treated as lesion masks:
+If multiple lesion files are detected for the same subject, specify one selector:
 
 ```bash
 bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-source-subdir manual_masks
-bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-pattern '*lesion*'
 ```
 
-`--lesion-resample` now resamples each selected lesion to the sequence declared in
-its lesion space (for native spaces like `T1w`, `FLAIR`, `dwi`) and updates the
-same output mask file.
+`--lesion-resample` safely resamples a mask over to the matching specified space.
 
-To split integer-valued lesions (for example `1=core`, `2=edema`) into one binary
-mask per label:
+### Splitting multi-label discrete lesion masks
 
-```bash
-bids-converter /path/to/source /path/to/output \
-  --lesion-space FLAIR \
-  --lesion-pattern '*space-FLAIR_les*' \
-  --lesion-split \
-  --lesion-split-label 1:core \
-  --lesion-split-label 2:edema \
-  --lesion-split-combined-desc edemacore
-```
-
-You can group multiple labels under the same desc (for example labels `1,2,3`
-as `core`, excluding label `4` by not mapping it):
+If you supply a mask where `1=core`, `2=edema`, etc., you can split it into binary structures. You can also specify overlaps logic recursively. For example, if you want regions `1, 2, and 3` pooled together to mean `core`:
 
 ```bash
 bids-converter /path/to/source /path/to/output \
@@ -160,33 +149,26 @@ bids-converter /path/to/source /path/to/output \
   --lesion-pattern '*lesion*' \
   --lesion-split \
   --lesion-split-label 1,2,3:core \
+  --lesion-split-label 4:edema \
+  --lesion-split-combined-desc edemacore \
   --lesion-split-primary-desc core
 ```
 
-When split masks are used with `--lesion-space T1w`, exactly one split mask
-(`--lesion-split-primary-desc`) is kept in `sub-*/anat/`. All split masks are
-written in `derivatives/manual_masks/`, and the primary anat mask is duplicated
-there as well.
+When split masks are built for `--lesion-space T1w`, exactly one split mask (`--lesion-split-primary-desc core`) places its output directly in `sub-XXX/anat/` while dumping everything else (the `edema` desc, combinations, duplicates of `core`) to `derivatives/manual_masks/`.
 
-For datasets with multiple lesion sources that need different options, use
-repeatable `--lesion-config` JSON objects (each can define `pattern`, `space`,
-`resample`, `split`, `split_labels`, `combined_desc`):
+For fully customized settings across different source lesion types in a massive folder tree, specify configurations recursively via JSON:
 
 ```bash
 bids-converter /path/to/source /path/to/output \
   --lesion-config '{"pattern":"*space-FLAIR_les*","space":"FLAIR","resample":true}' \
-  --lesion-config '{"pattern":"*space-MNI*","space":"MNI152NLin2009cAsym","split":true,"split_labels":{"1":"core","2":"edema"},"combined_desc":"edemacore"}'
+  --lesion-config '{"pattern":"*space-MNI*","space":"MNI152NLin2009cAsym","split":true,"split_labels":{"1,2,3":"core","4":"edema"},"combined_desc":"edemacore"}'
 ```
 
-By default the output tree is made read-only at the end of conversion; disable
-this behavior with `--no-target-read-only`.
-
-If the target directory already exists, it is removed before conversion starts.
+If the target directory already exists, it is structurally replaced (to clear invalid trees), preventing pollution.
 
 ## Participant ID provenance
 
-When IDs are normalized, the original DMP ID is preserved in an additional
-`participant_id_dmp` column in both `participants.tsv` and `acquisitions.tsv`.
+When IDs are normalized, the original DMP ID is preserved in an additional `participant_id_dmp` column in both `participants.tsv` and `acquisitions.tsv`.
 
 ## Project layout
 
@@ -194,5 +176,5 @@ When IDs are normalized, the original DMP ID is preserved in an additional
 - `src/bids_converter/converter.py`: conversion logic
 - `src/bids_converter/resources/`: bundled reference BIDS files and missing JSON defaults
 - `main.py`: compatibility launcher (`python main.py ...`)
-- `tests/`: minimal regression tests for CLI and mapping output
+- `tests/`: comprehensive regression tests checking affine compliance, plots, overlapping mask derivation, etc.
 

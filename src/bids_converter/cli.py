@@ -57,6 +57,13 @@ def _parse_lesion_config_json(value: str) -> dict[str, object]:
     return payload
 
 
+def _parse_json_dict(value: str) -> dict[str, Any]:
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise argparse.ArgumentTypeError(f"Invalid JSON: {exc}") from exc
+
+
 def _run_bids_validator(target_dir: Path) -> dict[str, object]:
     command = ["bids-validator-deno", str(target_dir)]
     try:
@@ -94,18 +101,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.set_defaults(copy_source_files=True, collapse_subject_id=True, validate_bids=True)
-    parser.add_argument("source_dir", type=Path, help="Input folder to convert.")
+    parser.add_argument("source_dir", type=Path, nargs="?", help="Input folder to convert (not required if using --inject-missing-json-only).")
     parser.add_argument("target_dir", type=Path, help="Output BIDS-ready folder.")
+    parser.add_argument(
+        "--inject-missing-json-only",
+        action="store_true",
+        help="Only inject missing JSON defaults iteratively into an existing BIDS output tree. Skips actual conversion.",
+    )
     parser.add_argument(
         "--missing-json-fields-file",
         type=Path,
         help=(
-            "Optional Python file that defines file_to_json_fields.\n"
+            "Optional JSON file that defines missing default fields.\n"
+            "Matches against both source and target paths.\n"
             "Supported forms:\n"
             "  {glob: {key: value}}\n"
-            "  {'0001-0100': {'Flair': {key: value}}}\n"
-            "Matching JSON files receive missing default fields."
+            "  {'0001-0100': {'Flair': {key: value}}}"
         ),
+    )
+    parser.add_argument(
+        "--missing-json-fields",
+        type=_parse_json_dict,
+        help="Optional inline JSON string that defines missing default fields (matches both source and target paths).",
     )
     parser.add_argument(
         "--skip-missing-json-defaults",
@@ -121,6 +138,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-sub-prefix",
         action="store_true",
         help="Disable automatic sub- prefix normalization for subject-like names.",
+    )
+    parser.add_argument(
+        "--clear-substitutions",
+        action="store_true",
+        help="Discard the default filename substitutions so only custom ones are applied.",
     )
     parser.add_argument(
         "--substitute-pattern",
@@ -258,6 +280,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--no-figure-dir",
+        dest="skip_figures",
+        action="store_true",
+        help="Skip figure generation even if --figure-dir is provided.",
+    )
+    parser.add_argument(
         "--fmap-fmri-pattern",
         action="append",
         default=[],
@@ -305,12 +333,26 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    substitutions = [*DEFAULT_FILENAME_SUBSTITUTIONS, *args.substitute_pattern]
-
     missing_json_fields: dict[str, dict[str, object]] = {}
     if not args.skip_missing_json_defaults:
-        missing_fields_path = args.missing_json_fields_file or get_bundled_missing_json_fields_file()
-        missing_json_fields = load_missing_json_fields(missing_fields_path)
+        if args.missing_json_fields:
+            missing_json_fields = args.missing_json_fields
+        else:
+            missing_fields_path = args.missing_json_fields_file or get_bundled_missing_json_fields_file()
+            missing_json_fields = load_missing_json_fields(missing_fields_path)
+
+    if args.inject_missing_json_only:
+        from .converter import inject_missing_json_in_place
+
+        result = inject_missing_json_in_place(args.target_dir, missing_json_fields)
+        print(json.dumps(result, indent=2, ensure_ascii=True))
+        return
+
+    if not args.source_dir:
+        parser.error("source_dir is required unless --inject-missing-json-only is used.")
+
+    substitutions = [] if args.clear_substitutions else [*DEFAULT_FILENAME_SUBSTITUTIONS]
+    substitutions.extend(args.substitute_pattern)
 
     reference_root = None
     if not args.skip_copy_top_level:
@@ -326,6 +368,8 @@ def main() -> None:
         parser.error("--lesion-config cannot be combined with --lesion-space/--lesion-source-subdir/--lesion-pattern")
 
     lesion_split_label_recipe = args.lesion_split_label
+
+    resolved_figure_dir = args.figure_dir if not getattr(args, "skip_figures", False) else None
 
     result = create_bids_ready_tree(
         source_dir=args.source_dir,
@@ -349,7 +393,7 @@ def main() -> None:
         lesion_split_labels=lesion_split_label_recipe,
         lesion_split_combined_desc=args.lesion_split_combined_desc,
         lesion_split_primary_desc=args.lesion_split_primary_desc,
-        figure_dir=args.figure_dir,
+        figure_dir=resolved_figure_dir,
         fmap_fmri_patterns=args.fmap_fmri_pattern,
         fmap_dwi_patterns=args.fmap_dwi_pattern,
         make_target_read_only=args.target_read_only,

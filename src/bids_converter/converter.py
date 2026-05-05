@@ -22,7 +22,7 @@ from nibabel.processing import resample_from_to
 
 BUNDLED_RESOURCES_DIR = Path(__file__).resolve().parent / "resources"
 BUNDLED_REFERENCE_BIDS_ROOT = BUNDLED_RESOURCES_DIR / "reference_bids"
-BUNDLED_MISSING_JSON_FIELDS_FILE = BUNDLED_RESOURCES_DIR / "missing_json_fields.py"
+BUNDLED_MISSING_JSON_FIELDS_FILE = BUNDLED_RESOURCES_DIR / "missing_json_fields.json"
 
 # Example rewrite: fMRI_rest_run-01 -> task-rest_run-01_bold
 DEFAULT_FILENAME_SUBSTITUTIONS: list[tuple[str, str]] = [
@@ -73,6 +73,8 @@ DEFAULT_JSON_FIELDS_CONVERSION = {
 
 SOURCE_TOPLEVEL_ALLOWLIST = {
     "acquisitions.tsv",
+    "README",
+    "README.md",
 }
 
 SUBJECT_ID_WITH_PREFIX_PATTERN = re.compile(
@@ -112,21 +114,29 @@ class LesionConfig:
     primary_desc: str | None = None
 
 
-def load_missing_json_fields(path: Path) -> dict[str, dict[str, Any]]:
+def get_bundled_missing_json_fields_file() -> Path:
+    return Path(__file__).parent / "resources" / "missing_json_fields.json"
+
+
+def load_missing_json_fields(source: str | Path | dict) -> dict[str, dict[str, Any]]:
+    if isinstance(source, dict):
+        return source.get("file_to_json_fields", source)
+    
+    path = Path(source)
     if not path.exists():
         raise FileNotFoundError(f"Missing JSON fields file not found: {path}")
 
-    spec = importlib.util.spec_from_file_location("missing_json_fields_module", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load module from {path}")
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    fields = getattr(module, "file_to_json_fields", None)
-    if not isinstance(fields, dict):
-        raise TypeError(f"Expected dict file_to_json_fields in {path}")
-    return fields
+    try:
+        content = json.loads(path.read_text(encoding="utf-8"))
+        if "file_to_json_fields" in content:
+            fields = content["file_to_json_fields"]
+        else:
+            fields = content
+        if not isinstance(fields, dict):
+            raise TypeError(f"Expected dict file_to_json_fields in {path}")
+        return fields
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Could not parse JSON from {path}: {exc}") from exc
 
 
 def get_bundled_reference_bids_root() -> Path:
@@ -135,10 +145,6 @@ def get_bundled_reference_bids_root() -> Path:
     return BUNDLED_REFERENCE_BIDS_ROOT
 
 
-def get_bundled_missing_json_fields_file() -> Path:
-    if not BUNDLED_MISSING_JSON_FIELDS_FILE.is_file():
-        raise FileNotFoundError(f"Bundled missing JSON fields file not found: {BUNDLED_MISSING_JSON_FIELDS_FILE}")
-    return BUNDLED_MISSING_JSON_FIELDS_FILE
 
 
 def _remove_path(path: Path) -> None:
@@ -226,6 +232,42 @@ def _matching_range_missing_fields(relative_paths: list[str], missing_rules: dic
                 merged.update(fields)
 
     return merged
+
+
+def inject_missing_json_in_place(target_dir: Path, missing_json_fields: dict[str, dict[str, Any]]) -> dict[str, int]:
+    target_dir = target_dir.expanduser().resolve()
+    if not target_dir.is_dir():
+        raise NotADirectoryError(f"Target directory does not exist: {target_dir}")
+
+    stats = {"json_files_updated": 0, "keys_added": 0}
+    for json_path in sorted(target_dir.rglob("*.json")):
+        rel_path = json_path.relative_to(target_dir)
+        try:
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if not isinstance(payload, dict):
+            continue
+
+        defaults = _matching_missing_fields(rel_path.as_posix(), missing_json_fields)
+        defaults.update(_matching_range_missing_fields([rel_path.as_posix()], missing_json_fields))
+
+        added = 0
+        for key, value in defaults.items():
+            if key not in payload:
+                payload[key] = value
+                added += 1
+
+        if added > 0:
+            json_path.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
+                encoding="utf-8",
+            )
+            stats["json_files_updated"] += 1
+            stats["keys_added"] += added
+
+    return stats
 
 
 def normalize_subject_token(token: str, add_sub_prefix: bool, collapse_subject_id: bool) -> str:
