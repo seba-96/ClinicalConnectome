@@ -28,7 +28,6 @@ classifiers = [
 
 [project.scripts]
 bids-converter = "bids_converter.cli:main"
-register-mni = "clinical_connectome.register_cli:main"
 
 
 [tool.setuptools]

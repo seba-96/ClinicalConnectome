@@ -1,14 +1,19 @@
 # ClinicalConnectome
 
-`ClinicalConnectome` includes a BIDS conversion tool that transforms a source dataset from EBRAINS 2.4 Data Management Plan (DMP) to a BIDS-ready dataset while applying:
+A CLI utility designed to transform neuroimaging data organized according to the EBRAINS 2.4 Data Management Plan into fully compliant BIDS (Brain Imaging Data Structure) folder structures.
 
-- filename/path substitutions
+## Overview
+
+The `bids-converter` tool automates the tedious parts of dataset conversion and curation by applying:
+
+- structural heuristics for filename/path substitutions
 - subject ID normalization (`sub-` prefix + optional ID collapsing)
-- JSON key renaming and default JSON field injection
-- automatic `IntendedFor` population in `fmap/*.json` from discovered BOLD/DWI NIfTI files
-- lesion mask relocation with explicit `--lesion-space` handling
-- bundled copy of top-level BIDS metadata files (overridable)
-- original DMP participant IDs preserved in `participant_id_dmp` column
+- JSON key renaming and missing default JSON field injection via configs
+- automatic `IntendedFor` population in `fmap/*.json` from discovered BOLD/DWI scans
+- advanced lesion mask handling with `--lesion-space` routing
+- bundled copying of top-level reference BIDS metadata
+- data provenance preservation (original DMP participant IDs in `participant_id_dmp` column)
+- immediate BIDS compliance validation with `bids-validator-deno`
 
 The repository already includes:
 
