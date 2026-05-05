@@ -58,7 +58,7 @@ class LesionMaskPlacementTests(unittest.TestCase):
 
             create_bids_ready_tree(source_dir=src, target_dir=dst, overwrite=True, lesion_space="T1w")
 
-            expected = dst / "sub-0001" / "anat" / "sub-0001_lesion_roi.nii.gz"
+            expected = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_lesion_roi.nii.gz"
             self.assertTrue(expected.exists())
 
     def test_non_t1w_lesion_masks_are_placed_under_derivatives_manual_masks(self) -> None:
@@ -160,8 +160,8 @@ class LesionMaskPlacementTests(unittest.TestCase):
             )
 
             converted_t1w = dst / "sub-0001" / "anat" / "sub-0001_T1w.nii.gz"
-            converted_lesion = dst / "sub-0001" / "anat" / "sub-0001_lesion_roi.nii.gz"
-            overlay_png = figures / "sub-0001" / "anat" / "sub-0001_lesion_roi_overlay.png"
+            converted_lesion = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_lesion_roi.nii.gz"
+            overlay_png = figures / "sub-0001" / "anat" / "sub-0001_space-T1w_lesion_roi_overlay.png"
             t1w_png = figures / "sub-0001" / "anat" / "sub-0001_T1w_axial.png"
             subject_html = figures / "sub-0001.html"
 
@@ -175,7 +175,7 @@ class LesionMaskPlacementTests(unittest.TestCase):
             self.assertTrue(subject_html.exists())
             html_content = subject_html.read_text(encoding="utf-8")
             self.assertIn("sub-0001/anat/sub-0001_T1w_axial.png", html_content)
-            self.assertIn("sub-0001/anat/sub-0001_lesion_roi_overlay.png", html_content)
+            self.assertIn("sub-0001/anat/sub-0001_space-T1w_lesion_roi_overlay.png", html_content)
             self.assertEqual(self._read_png_size(t1w_png), (1800, 300))
             self.assertEqual(self._read_png_size(overlay_png), (1800, 300))
             self.assertEqual(result["lesions_resampled"], 1)
@@ -253,9 +253,9 @@ class LesionMaskPlacementTests(unittest.TestCase):
             )
 
             t1w_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-sub-0001-t1w_label-lesion_mask.nii.gz"
-            flair_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-FLAIR_desc-sub-0001-flair_label-lesion_mask.nii.gz"
-            dwi_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-dwi_desc-sub-0001-dwi_label-lesion_mask.nii.gz"
-            canonical_flair_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-FLAIR_label-lesion_mask.nii.gz"
+            flair_mask = dst / "sub-0001" / "anat" / "sub-0001_space-FLAIR_desc-sub-0001-flair_lesion_roi.nii.gz"
+            dwi_mask = dst / "sub-0001" / "anat" / "sub-0001_space-dwi_desc-sub-0001-dwi_lesion_roi.nii.gz"
+            canonical_flair_mask = dst / "sub-0001" / "anat" / "sub-0001_space-FLAIR_lesion_roi.nii.gz"
 
             self.assertFalse(t1w_mask.exists())
             self.assertFalse(flair_mask.exists())
@@ -379,8 +379,8 @@ class LesionMaskPlacementTests(unittest.TestCase):
                 lesion_split_primary_desc="core",
             )
 
-            anat_core = dst / "sub-0001" / "anat" / "sub-0001_desc-core_lesion_roi.nii.gz"
-            anat_edema = dst / "sub-0001" / "anat" / "sub-0001_desc-edema_lesion_roi.nii.gz"
+            anat_core = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-core_lesion_roi.nii.gz"
+            anat_edema = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-edema_lesion_roi.nii.gz"
             deriv_core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-core_label-lesion_mask.nii.gz"
             deriv_edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-edema_label-lesion_mask.nii.gz"
 
@@ -424,7 +424,7 @@ class LesionMaskPlacementTests(unittest.TestCase):
                 ],
             )
 
-            flair_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-FLAIR_label-lesion_mask.nii.gz"
+            flair_mask = dst / "sub-0001" / "anat" / "sub-0001_space-FLAIR_lesion_roi.nii.gz"
             mni_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin2009cAsym_label-lesion_mask.nii.gz"
             self.assertTrue(flair_mask.exists())
             self.assertTrue(mni_mask.exists())

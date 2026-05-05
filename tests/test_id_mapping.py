@@ -41,7 +41,7 @@ class ParticipantIdMappingTests(unittest.TestCase):
 
             with (dst / "participants.tsv").open("r", encoding="utf-8", newline="") as f:
                 participant_rows = list(csv.DictReader(f, delimiter="\t"))
-            with (dst / "acquisitions.tsv").open("r", encoding="utf-8", newline="") as f:
+            with (dst / "acquisitions_dmp.tsv").open("r", encoding="utf-8", newline="") as f:
                 acquisition_rows = list(csv.DictReader(f, delimiter="\t"))
 
             self.assertEqual(participant_rows[0]["participant_id"], "sub-STUNIPD0001")

@@ -26,15 +26,24 @@ BUNDLED_MISSING_JSON_FIELDS_FILE = BUNDLED_RESOURCES_DIR / "missing_json_fields.
 
 # Example rewrite: fMRI_rest_run-01 -> task-rest_run-01_bold
 DEFAULT_FILENAME_SUBSTITUTIONS: list[tuple[str, str]] = [
+    (r"fMRI_PA", r"dir-PA_epi"),
+    (r"fMRI_AP", r"dir-AP_epi"),
     (r"fMRI_rest_pa", r"dir-PA_epi"), # fmri fmap
+    (r"fMRI_rest_PA", r"dir-PA_epi"),  # fmri fmap
+    (r"fMRI_rest_ap", r"dir-AP_epi"),  # fmri fmap
+    (r"fMRI_rest_AP", r"dir-AP_epi"),  # fmri fmap
     (r"fMRI_rest_(run-[0-9]+)", r"task-rest_\1_bold"),
     (r"fMRI_rest_run([0-9]+)", r"task-rest_run-\1_bold"),
     (r"fMRI_rest", r"task-rest_bold"),
     (r"Flair", "FLAIR"),
     (r"lesion", "lesion_roi"),
     (r'T1w_pre', 'T1w'),
+    (r'SWI', 'swi'),
     (r'T1w_wca', 'ce-gadolinium_T1w'),
     (r"dMRI_pa", "dir-PA_epi"),  # dwi fmap
+    (r"dMRI_PA", "dir-PA_epi"),  # dwi fmap
+    (r"dMRI_ap", "dir-AP_epi"),  # dwi fmap
+    (r"dMRI_AP", "dir-AP_epi"),
     (r"dMRI", "dwi"),
     (r"dir-AP_epi", "acq-dwi_dir-AP_epi"), # FIXME not ideal: it assumes that the fmap if for dwi
     (r"dir-PA_epi", "acq-dwi_dir-PA_epi"), # FIXME not ideal: it assumes that the fmap if for dwi
@@ -56,7 +65,7 @@ DEFAULT_BIDSIGNORE_PATTERNS = [
     "*lesion_roi.nii.gz",
     "*lesion_roi.json",
     "acquisitions.tsv",
-    "acquisitions_bids.tsv",
+    "acquisitions_dmp.tsv",
     "**/perf/*_dsc.nii.gz",
     "**/perf/*_dsc.json"
 ]
@@ -422,10 +431,19 @@ def _copy_top_level_bids_files(
             continue
 
         force_from_reference = filename == "dataset_description.json"
-        if dst.exists() or dst.is_symlink():
-            if not overwrite and not force_from_reference:
-                continue
-            _remove_path(dst)
+        
+        if Path(filename).stem == "README":
+            existing_readmes = [p for p in target_root.iterdir() if p.name.startswith("README")]
+            if existing_readmes:
+                if not overwrite and not force_from_reference:
+                    continue
+                for existing in existing_readmes:
+                    _remove_path(existing)
+        else:
+            if dst.exists() or dst.is_symlink():
+                if not overwrite and not force_from_reference:
+                    continue
+                _remove_path(dst)
 
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
@@ -736,8 +754,8 @@ def _lesion_destination_relative_path(
     elif multiple_for_subject:
         desc_entity = f"_desc-{_safe_descriptor_token(source_rel_path.name)}"
 
-    if normalized_space.lower() == "t1w" and not force_derivatives:
-        filename = f"{subject}{desc_entity}_lesion_roi{suffix}"
+    if "mni" not in normalized_space.lower() and not force_derivatives:
+        filename = f"{subject}_space-{normalized_space}{desc_entity}_lesion_roi{suffix}"
         return Path(subject) / "anat" / filename
 
     filename = f"{subject}_space-{normalized_space}{desc_entity}_label-lesion_mask{suffix}"
@@ -1539,6 +1557,10 @@ def _lesion_resample_destination_relative_path(
 
     suffix = _path_suffix(lesion_rel_path)
     reference_desc = _safe_descriptor_token(_nifti_stem(reference_rel_path))
+    if "mni" not in space_label.lower():
+        filename = f"{subject}_space-{space_label}_desc-{reference_desc}_lesion_roi{suffix}"
+        return Path(subject) / "anat" / filename
+
     filename = f"{subject}_space-{space_label}_desc-{reference_desc}_label-lesion_mask{suffix}"
     return Path("derivatives") / "manual_masks" / subject / "anat" / filename
 
@@ -1731,7 +1753,7 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
             continue
         rel_path = image_path.relative_to(target_dir)
         name_lower = rel_path.name.lower()
-        if "derivatives" in rel_path.parts or "lesion" in name_lower:
+        if "derivatives" in rel_path.parts and "lesion" not in name_lower:
             continue
         if _extract_bids_entity(rel_path, "sub-") is None:
             continue
@@ -1741,16 +1763,23 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
         "participant_id",
         "session_id",
         "modality",
+        "acquisition_type",
         "scan_path",
-        "voxel_size_mm",
-        "repetition_time_s",
+        "time_repetition",
         "total_length_minutes",
-        "dwi_unique_nonzero_bvals",
-        "dwi_unique_nonzero_bvals_values",
-        "dwi_diffusion_directions",
+        "manufacturer",
         "machine",
-        "model",
-        "tesla",
+        "tesla_field",
+        "echo_time",
+        "flip_angle",
+        "head_coil",
+        "resolution_x",
+        "resolution_y",
+        "resolution_z",
+        "acquisition_plan",
+        "vol_num",
+        "bvecs_num",
+        "bval",
     ]
     rows: list[dict[str, str]] = []
 
@@ -1765,59 +1794,102 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
             image = nib.load(str(image_path))
         except Exception:
             continue
+            
+        zooms = image.header.get_zooms()
+        res_x = _format_metric(zooms[0]) if len(zooms) > 0 else ""
+        res_y = _format_metric(zooms[1]) if len(zooms) > 1 else ""
+        res_z = _format_metric(zooms[2]) if len(zooms) > 2 else ""
+
+        dmp_type = ""
+        path_str = rel_path.as_posix()
+        name_lower = rel_path.name.lower()
+        if "lesion" in name_lower:
+            dmp_type = "lesion"
+        elif "rest" in name_lower:
+            dmp_type = "fMRI_rest"
+        elif "/fmap/" in f"/{path_str}":
+            dmp_type = "SE"
+        elif "t1w" in name_lower:
+            if "ce-gadolinium" in name_lower:
+                dmp_type = "T1w_wca"
+            else:
+                dmp_type = "T1w"
+        elif "t2w" in name_lower:
+            dmp_type = "T2w"
+        elif "flair" in name_lower:
+            dmp_type = "Flair"
+        elif "/dwi/" in f"/{path_str}" or "dwi" in name_lower:
+            dmp_type = "dMRI"
+        elif "perf" in name_lower or "/perf/" in f"/{path_str}":
+            dmp_type = "perf"
+        elif "swi" in name_lower:
+            dmp_type = "SWI"
 
         row = {
             "participant_id": subject,
             "session_id": session,
             "modality": modality,
+            "acquisition_type": dmp_type,
             "scan_path": rel_path.as_posix(),
-            "voxel_size_mm": _extract_nifti_voxel_size(image),
-            "repetition_time_s": "",
+            "time_repetition": "",
             "total_length_minutes": "",
-            "dwi_unique_nonzero_bvals": "",
-            "dwi_unique_nonzero_bvals_values": "",
-            "dwi_diffusion_directions": "",
-            "machine": str(sidecar_payload.get("Manufacturer", "")),
-            "model": str(sidecar_payload.get("ManufacturersModelName", "")),
-            "tesla": "",
+            "manufacturer": str(sidecar_payload.get("Manufacturer", "")),
+            "machine": str(sidecar_payload.get("ManufacturersModelName", "")),
+            "tesla_field": "",
+            "echo_time": str(sidecar_payload.get("EchoTime", "")),
+            "flip_angle": str(sidecar_payload.get("FlipAngle", "")),
+            "head_coil": str(sidecar_payload.get("ReceiveCoilName", "")),
+            "resolution_x": res_x,
+            "resolution_y": res_y,
+            "resolution_z": res_z,
+            "acquisition_plan": "",
+            "vol_num": "",
+            "bvecs_num": "",
+            "bval": "",
         }
+
+        axcodes = nib.aff2axcodes(image.affine)
+        if len(axcodes) >= 3:
+            z_ax = axcodes[2]
+            if z_ax in ('I', 'S'):
+                row["acquisition_plan"] = "Axial"
+            elif z_ax in ('L', 'R'):
+                row["acquisition_plan"] = "Sagittal"
+            elif z_ax in ('A', 'P'):
+                row["acquisition_plan"] = "Coronal"
 
         tesla_value = _coerce_float(sidecar_payload.get("MagneticFieldStrength"))
         if tesla_value is not None:
-            row["tesla"] = _format_metric(tesla_value)
+            row["tesla_field"] = _format_metric(tesla_value)
 
         tr = _coerce_float(sidecar_payload.get("RepetitionTime"))
         if tr is None:
-            zooms = image.header.get_zooms()
             if len(zooms) > 3:
                 tr = _coerce_float(zooms[3])
         if tr is not None:
-            row["repetition_time_s"] = _format_metric(tr)
+            row["time_repetition"] = _format_metric(tr)
 
         shape = image.shape
         n_volumes = int(shape[3]) if len(shape) > 3 else 1
+        row["vol_num"] = str(n_volumes)
 
         if modality == "func" and tr is not None and n_volumes > 0:
             total_minutes = (tr * n_volumes) / 60.0
             row["total_length_minutes"] = _format_metric(total_minutes)
+            
+        stem = _bids_stem(image_path)
+        bvals = _read_numeric_vector(image_path.with_name(f"{stem}.bval"))
+        if bvals:
+            unique_values = sorted({int(round(value)) for value in bvals})
+            row["bval"] = ",".join(str(v) for v in unique_values)
 
-        if modality == "dwi":
-            stem = _bids_stem(image_path)
-            bvals = _read_numeric_vector(image_path.with_name(f"{stem}.bval"))
-            if bvals:
-                unique_nonzero_values = sorted({value for value in bvals if value > 0})
-                row["dwi_unique_nonzero_bvals"] = _format_metric(float(len(unique_nonzero_values)))
-                row["dwi_unique_nonzero_bvals_values"] = ",".join(
-                    _format_metric(value) for value in unique_nonzero_values
-                )
-
-            bvec_columns = _read_bvec_columns(image_path.with_name(f"{stem}.bvec"))
-            directions = _count_diffusion_directions(bvals, bvec_columns)
-            row["dwi_diffusion_directions"] = _format_metric(float(directions))
+        bvec_columns = _read_bvec_columns(image_path.with_name(f"{stem}.bvec"))
+        if bvec_columns is not None:
+            row["bvecs_num"] = str(len(bvec_columns))
 
         rows.append(row)
 
-    out_path = target_dir / "acquisitions_bids.tsv"
+    out_path = target_dir / "acquisitions.tsv"
     with out_path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
@@ -2008,6 +2080,8 @@ def create_bids_ready_tree(
             collapse_subject_id,
         )
         final_rel_path = transformed_rel_path
+        if final_rel_path.name == "acquisitions.tsv":
+            final_rel_path = final_rel_path.with_name("acquisitions_dmp.tsv")
         lesion_config = lesion_config_by_relative_path.get(rel_path) if src_path.is_file() else None
         if src_path.is_file() and lesion_config is not None:
             lesion_subject = _extract_subject_label(transformed_rel_path) or _extract_subject_label(rel_path)
@@ -2200,7 +2274,7 @@ def create_bids_ready_tree(
     ):
         stats["participants_normalized"] += 1
 
-    acquisitions_target = target_dir / "acquisitions.tsv"
+    acquisitions_target = target_dir / "acquisitions_dmp.tsv"
     if acquisitions_target.exists() and _normalize_tsv_participant_id(
         acquisitions_target,
         collapse_subject_id=collapse_subject_id,

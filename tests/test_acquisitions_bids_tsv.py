@@ -46,19 +46,19 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
 
             self.assertEqual(result["acquisitions_bids_rows"], 1)
 
-            with (dst / "acquisitions_bids.tsv").open("r", encoding="utf-8", newline="") as f:
+            with (dst / "acquisitions.tsv").open("r", encoding="utf-8", newline="") as f:
                 rows = list(csv.DictReader(f, delimiter="\t"))
 
             self.assertEqual(len(rows), 1)
             row = rows[0]
             self.assertTrue(row["participant_id"].startswith("sub-"))
             self.assertEqual(row["modality"], "func")
-            self.assertEqual(row["voxel_size_mm"], "2.0,2.0,2.5")
-            self.assertEqual(row["repetition_time_s"], "2.0")
+            self.assertEqual(row["resolution_x"], "2.0")
+            self.assertEqual(row["time_repetition"], "2.0")
             self.assertEqual(row["total_length_minutes"], "4.0")
-            self.assertEqual(row["machine"], "Siemens")
-            self.assertEqual(row["model"], "Prisma")
-            self.assertEqual(row["tesla"], "3.0")
+            self.assertEqual(row["manufacturer"], "Siemens")
+            self.assertEqual(row["machine"], "Prisma")
+            self.assertEqual(row["tesla_field"], "3.0")
 
     def test_writes_dwi_metrics_including_bvals_and_directions(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:
@@ -93,19 +93,18 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
 
             self.assertEqual(result["acquisitions_bids_rows"], 2)
 
-            with (dst / "acquisitions_bids.tsv").open("r", encoding="utf-8", newline="") as f:
+            with (dst / "acquisitions.tsv").open("r", encoding="utf-8", newline="") as f:
                 rows = list(csv.DictReader(f, delimiter="\t"))
 
             self.assertEqual(len(rows), 2)
             for row in rows:
                 self.assertEqual(row["modality"], "dwi")
                 self.assertNotIn("dwi_number_of_runs", row)
-                self.assertEqual(row["dwi_unique_nonzero_bvals"], "2.0")
-                self.assertEqual(row["dwi_unique_nonzero_bvals_values"], "1000.0,2000.0")
-                self.assertEqual(row["dwi_diffusion_directions"], "3.0")
-                self.assertEqual(row["machine"], "GE")
-                self.assertEqual(row["model"], "SIGNA")
-                self.assertEqual(row["tesla"], "1.5")
+                self.assertEqual(row["bval"], "0,1000,2000")
+                self.assertEqual(row["bvecs_num"], "5")
+                self.assertEqual(row["manufacturer"], "GE")
+                self.assertEqual(row["machine"], "SIGNA")
+                self.assertEqual(row["tesla_field"], "1.5")
 
     def test_accepts_gzipped_bval_and_bvec_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:
@@ -129,14 +128,13 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
 
             create_bids_ready_tree(source_dir=src, target_dir=dst, overwrite=True)
 
-            with (dst / "acquisitions_bids.tsv").open("r", encoding="utf-8", newline="") as f:
+            with (dst / "acquisitions.tsv").open("r", encoding="utf-8", newline="") as f:
                 rows = list(csv.DictReader(f, delimiter="\t"))
 
             self.assertEqual(len(rows), 1)
-            row = rows[0]
-            self.assertEqual(row["dwi_unique_nonzero_bvals"], "2.0")
-            self.assertEqual(row["dwi_unique_nonzero_bvals_values"], "1000.0,2000.0")
-            self.assertEqual(row["dwi_diffusion_directions"], "3.0")
+        row = rows[0]
+        self.assertEqual(row["bval"], "0,1000,2000")
+        self.assertEqual(row["bvecs_num"], "5")
 
     def test_invalid_binary_bval_does_not_crash(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:
@@ -153,14 +151,13 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
 
             create_bids_ready_tree(source_dir=src, target_dir=dst, overwrite=True)
 
-            with (dst / "acquisitions_bids.tsv").open("r", encoding="utf-8", newline="") as f:
+            with (dst / "acquisitions.tsv").open("r", encoding="utf-8", newline="") as f:
                 rows = list(csv.DictReader(f, delimiter="\t"))
 
             self.assertEqual(len(rows), 1)
             row = rows[0]
-            self.assertEqual(row["dwi_unique_nonzero_bvals"], "")
-            self.assertEqual(row["dwi_unique_nonzero_bvals_values"], "")
-            self.assertEqual(row["dwi_diffusion_directions"], "3.0")
+            self.assertEqual(row["bval"], "")
+            self.assertEqual(row["bvecs_num"], "5")
 
 
 if __name__ == "__main__":

@@ -29,6 +29,10 @@ If you are running it on PHI:
 1. Open a new Desktop in PHI.
 2. Open a `'MULTI'` terminal.
 
+Remember to keep an original copy of you DMP compliant dataset and place the new BIDS compliant dataset in PHI under the directory /Clinical_connectome_bids/<center>/<dataset_id>
+When encountering issues with conversion you can run the bids-converter separately on different sub-groups of the dataset and eventually merge (ie copy) the resulting BIDS compliant sub-datasets together.
+Note that in the latter case acquisitions_bids.tsv files must be merged.
+
 ### Clone and install
 
 Run the following commands in your terminal to clone the repository and set up the virtual environment. Python 3.10+ and Git are required. 
@@ -68,7 +72,7 @@ bids-converter \
   /path/to/source \
   /path/to/output \
   --reference-bids-root /path/to/reference_bids \
-  --missing-json-fields '{"*FLAIR*": {"TaskName": "hello"}}'
+  --missing-json-fields '{"*func*": {"TaskName": "rest"}}'
 ```
 
 If you don't need figure generation (or only want to clear existing default substitutions), you can modify the default behavior using flags:
@@ -80,13 +84,7 @@ bids-converter /path/to/source /path/to/output \
   --substitute-pattern 'my_old_pattern=>my_new_pattern'
 ```
 
-By default, the converter validates generated output with `bids-validator-deno` after conversion. It also sets the output destination to read-only (`--target-read-only`).
-
-To skip validation for a run:
-
-```bash
-bids-converter /path/to/source /path/to/output --no-validate-bids
-```
+By default, the converter validates generated output with `bids-validator-deno` after conversion.
 
 To inspect full CLI help:
 
@@ -94,9 +92,9 @@ To inspect full CLI help:
 bids-converter --help
 ```
 
-### Inject missing JSON fields into an existing tree
+### Add missing JSON fields into an existing BIDS dataset
 
-If you have an **already converted BIDS dataset** and simply want to retroactively inject missing JSON fields without repeating the entire conversion process, you can bypass `source_dir` requirements by providing `--inject-missing-json-only`:
+If you have an **already converted BIDS dataset** and simply want to retroactively add missing JSON fields without repeating the entire conversion process, you can bypass `source_dir` requirements by providing `--inject-missing-json-only`:
 
 ```bash
 bids-converter /path/to/existing_bids_output \
