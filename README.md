@@ -1,10 +1,10 @@
 # ClinicalConnectome
 
-A CLI utility designed to transform neuroimaging data organized according to the EBRAINS 2.4 Data Management Plan into fully compliant BIDS (Brain Imaging Data Structure) folder structures.
+A CLI utility designed to transform neuroimaging data organized according to the EBRAINS WP-2 Data Management Plan (version 2025) into fully compliant BIDS (Brain Imaging Data Structure) folder structures.
 
 ## Where and how to run
 
-This package can be run **locally** on your computer terminal, or on a **PHI. 
+This package can be run **locally** on your computer terminal, or on PHI. 
 If you are running it on PHI:
 1. Open a new Desktop in PHI.
 2. Open a `'MULTI'` terminal.
@@ -13,9 +13,13 @@ Remember to keep an original copy of you DMP compliant dataset and place the new
 When encountering issues with conversion you can run the bids-converter separately on different sub-groups of the dataset and eventually merge (ie copy) the resulting BIDS compliant sub-datasets together.
 Note that in the latter case acquisitions.tsv files must be merged.
 
+Bundled in examples/ you can find the shell scripts to install/update the app and convert a dataset on PHI which can be edited based on your needs. 
+
+Below follows a summary of the installation and usage steps.
+
 ### Clone and install
 
-Run the following commands in your terminal to clone the repository and set up the virtual environment. Python 3.10+ and Git are required. 
+Run the following commands in your terminal to clone the repository and set up the virtual environment. If you run it locally you need to have installed Python 3.10+ and Git. 
 
 ```bash
 git clone https://github.com/seba-96/ClinicalConnectome.git
@@ -50,8 +54,8 @@ Then run the converter with the source (DMP dataset) and output paths (BIDS data
 
 ```bash
 bids-converter \
-  /path/to/source \
-  /path/to/output
+  /Clinical_connectome/UNIPD/WashU \
+  /Clinical_connectome_bids/UNIPD/WashU
 ```
 
 To inspect full CLI help:
@@ -71,7 +75,7 @@ bids-converter /path/to/source /path/to/output --lesion-space T1w
 **Lesion destination rules:**
 - `--lesion-space T1w`: place masks in `sub-*/anat/` as `sub-XXX_space-T1w_lesion_roi.nii.gz`
 - `--lesion-space MNI152NLin2009cAsym` (or any other MNI version): place masks in `derivatives/manual_masks/sub-XXX/anat/`. Even if the source file is located in an `anat/` source subfolder, specifying MNI bounds it to derivatives automatically.
-- Other native spaces (e.g., `FLAIR`, `dwi`) place masks in `sub-*/anat/` like T1w.
+- Other native spaces place masks in `sub-*/anat/` like T1w.
 
 If you have multiple lesion files in different spaces, specify one `--lesion-config` per pattern. Example with one T1w mask and one MNI mask:
 
@@ -98,9 +102,9 @@ bids-converter /path/to/source /path/to/output \
   --lesion-split-combined-desc edemacore
 ```
 
-When split masks are built for non-MNI spaces (including `--lesion-space T1w`), all split outputs are kept in `sub-XXX/anat/`.
+When split masks are built for non-MNI spaces, all split outputs are kept in `sub-XXX/anat/`.
 
-For fully customized settings across different source lesion types in a massive folder tree, specify configurations recursively via JSON:
+For fully customized settings across different source lesion types, specify configurations recursively via JSON:
 
 ```bash
 bids-converter /path/to/source /path/to/output \

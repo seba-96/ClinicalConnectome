@@ -98,16 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
         prog="bids-converter",
         formatter_class=argparse.RawTextHelpFormatter,
         description=(
-            "Create a BIDS-ready mirror directory from a source folder.\n"
+            "Converts a DMP-compliant dataset into a BIDS-compliant dataset.\n"
             "The converter can rename paths, normalize subject IDs, patch JSON keys,\n"
-            "and copy/symlink source files with optional top-level metadata from a reference BIDS root."
+            "and copy source files."
         ),
         epilog=(
-            "Examples:\n"
-            "  bids-converter ./input ./output\n"
-            "  bids-converter ./input ./output --symlink-source-files\n"
-            "  bids-converter ./input ./output \\\n"
-            "    --missing-json-fields-file ./missing_json_fields.py\n"
+            "Example:\n"
+            "  bids-converter ./input ./output"
         ),
     )
 
@@ -127,7 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Matches against both source and target paths.\n"
             "Supported forms:\n"
             "  {glob: {key: value}}\n"
-            "  {'0001-0100': {'Flair': {key: value}}}"
+            "  {'0001-0100': {'Flair': {key: value}}}\n"
+            "0001-0100 matches any subject id within the specified numeric range (ie, 1-->100).\n"
         ),
     )
     parser.add_argument(
@@ -159,7 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--clear-substitutions",
         action="store_true",
-        help="Discard the default filename substitutions so only custom ones are applied.",
+        help="Discard the default filename substitutions from DMP to BIDS so only custom ones are applied.",
     )
     parser.add_argument(
         "--substitute-pattern",
@@ -217,7 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--validate-bids",
         dest="validate_bids",
         action="store_true",
-        help="Run bids-validator (or bids-validator-deno) against the generated target directory after conversion (default).",
+        help="Run bids-validator against the generated target directory after conversion (default).",
     )
     parser.add_argument(
         "--no-validate-bids",
@@ -228,15 +226,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lesion-space",
         help=(
-            "Space of lesion masks found in source data (required when lesion files are present).\n"
-            "Use T1w (or other native spaces) to store masks in sub/anat; MNI spaces store masks in derivatives/manual_masks/sub-*/anat."
+            "Space of lesion masks found in source data (required when lesion files are present)"
         ),
     )
     parser.add_argument(
         "--lesion-resample",
         action="store_true",
         help=(
-            "Resample lesions to the sequence in --lesion-space (native spaces only)."
+            "Resample lesions to the sequence in --lesion-space."
         ),
     )
     parser.add_argument(
@@ -265,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Repeatable lesion config as JSON object for per-file handling.\n"
             "Example: '{\"pattern\":\"*space-FLAIR_les*\",\"space\":\"FLAIR\",\"resample\":true,"
-            "\"split\":true,\"split_labels\":{\"1\":\"core\",\"2\":\"edema\"},\"combined_desc\":\"edemacore\"}'"
+            "\"split\":true,\"split_labels\":{\"1\":\"core\",\"2\":\"edema\"}}'"
         ),
     )
     parser.add_argument(
@@ -273,7 +270,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "Optional directory where 6-slice axial montage PNGs of all scans are written.\n"
-            "When --lesion-space T1w is used, lesion overlays on T1w are also saved here.\n"
             "A subject-level HTML page embedding all generated figures is created for each subject."
         ),
     )
@@ -289,7 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PATTERN",
         help=(
-            "Treat matching files currently under func/ as fieldmaps and move them to fmap/\n"
+            "Treat matching files currently under func/ as field maps and move them to fmap/\n"
             "while forcing filename entity acq-fmri (repeatable; supports substring or glob)."
         ),
     )
@@ -299,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PATTERN",
         help=(
-            "Treat matching files currently under dwi/ as fieldmaps and move them to fmap/\n"
+            "Treat matching files currently under dwi/ as field maps and move them to fmap/\n"
             "while forcing filename entity acq-dwi (repeatable; supports substring or glob)."
         ),
     )
@@ -310,7 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lesion_selector_group.add_argument(
         "--lesion-pattern",
-        help="Restrict lesion detection to files matching this glob/path pattern (for example '*lesion*').",
+        help="Restrict lesion detection to source files matching this glob/path pattern (for example '*lesion*').",
     )
     intendedfor_group = parser.add_mutually_exclusive_group()
     intendedfor_group.add_argument(
