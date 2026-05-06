@@ -17,6 +17,7 @@ dependencies = [
   "nipype>=1.8.6",
   "numpy>=1.24",
   "templateflow>=24.2.0",
+  "bids-validator-deno>=2.0.0",
 ]
 keywords = ["bids", "neuroimaging", "converter", "clinicalconnectome"]
 classifiers = [
@@ -41,4 +42,3 @@ bids_converter = ["resources/*", "resources/reference_bids/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-

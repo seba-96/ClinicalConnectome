@@ -66,7 +66,7 @@ def _parse_json_dict(value: str) -> dict[str, Any]:
 
 def _run_bids_validator(target_dir: Path) -> dict[str, object]:
     commands = [
-        ["bids-validator", str(target_dir)],
+        # ["bids-validator", str(target_dir)],
         ["bids-validator-deno", str(target_dir)],
     ]
     last_error: Exception | None = None
