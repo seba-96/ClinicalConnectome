@@ -4,7 +4,7 @@ A CLI utility designed to transform neuroimaging data organized according to the
 
 ## Where and how to run
 
-This package can be run **locally** on your computer terminal, or on PHI. 
+This package can be run locally on your computer terminal, or on PHI. 
 If you are running it on PHI:
 1. Open a new Desktop in PHI.
 2. Open a `'MULTI'` terminal.
