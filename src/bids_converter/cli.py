@@ -130,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip loading missing JSON field defaults (including bundled defaults).",
     )
     parser.add_argument(
+        "--drop-json-fields",
+        nargs="+",
+        metavar="FIELD",
+        help="Remove these JSON fields during --inject-missing-json-only (repeatable fields allowed).",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Overwrite existing target files if needed.",
@@ -212,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--lesion-space",
         help=(
             "Space of lesion masks found in source data (required when lesion files are present).\n"
-            "Use T1w to store masks in sub/anat; any other space stores masks in derivatives/manual_masks/sub-*/anat."
+            "Use T1w (or other native spaces) to store masks in sub/anat; MNI spaces store masks in derivatives/manual_masks/sub-*/anat."
         ),
     )
     parser.add_argument(
@@ -240,13 +246,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also write a combined binary lesion mask (>0) with this desc entity, e.g. edemacore.",
     )
     parser.add_argument(
-        "--lesion-split-primary-desc",
-        help=(
-            "For split lesions in T1w space, choose which split desc remains in sub-*/anat. "
-            "Other split masks go to derivatives."
-        ),
-    )
-    parser.add_argument(
         "--lesion-config",
         action="append",
         type=_parse_lesion_config_json,
@@ -257,18 +256,6 @@ def build_parser() -> argparse.ArgumentParser:
             "Example: '{\"pattern\":\"*space-FLAIR_les*\",\"space\":\"FLAIR\",\"resample\":true,"
             "\"split\":true,\"split_labels\":{\"1\":\"core\",\"2\":\"edema\"},\"combined_desc\":\"edemacore\"}'"
         ),
-    )
-    parser.add_argument(
-        "--target-read-only",
-        dest="target_read_only",
-        action="store_true",
-        help="Mark generated target directory as read-only at the end (default).",
-    )
-    parser.add_argument(
-        "--no-target-read-only",
-        dest="target_read_only",
-        action="store_false",
-        help="Do not change target directory permissions at the end.",
     )
     parser.add_argument(
         "--figure-dir",
@@ -325,7 +312,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force IntendedFor discovery to include only DWI targets for all fmap sidecars.",
     )
-    parser.set_defaults(target_read_only=True)
     return parser
 
 
@@ -344,8 +330,20 @@ def main() -> None:
     if args.inject_missing_json_only:
         from .converter import inject_missing_json_in_place
 
-        result = inject_missing_json_in_place(args.target_dir, missing_json_fields)
+        result = inject_missing_json_in_place(
+            args.target_dir,
+            missing_json_fields,
+            drop_json_fields=args.drop_json_fields,
+        )
+
+        if args.validate_bids:
+            validation_result = _run_bids_validator(args.target_dir)
+            result["bids_validation"] = validation_result
+
         print(json.dumps(result, indent=2, ensure_ascii=True))
+
+        if args.validate_bids and int(result["bids_validation"]["returncode"]) != 0:
+            raise SystemExit(int(result["bids_validation"]["returncode"]))
         return
 
     if not args.source_dir:
@@ -392,11 +390,9 @@ def main() -> None:
         lesion_split=args.lesion_split,
         lesion_split_labels=lesion_split_label_recipe,
         lesion_split_combined_desc=args.lesion_split_combined_desc,
-        lesion_split_primary_desc=args.lesion_split_primary_desc,
         figure_dir=resolved_figure_dir,
         fmap_fmri_patterns=args.fmap_fmri_pattern,
         fmap_dwi_patterns=args.fmap_dwi_pattern,
-        make_target_read_only=args.target_read_only,
     )
 
     if args.validate_bids:

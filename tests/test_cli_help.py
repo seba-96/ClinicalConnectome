@@ -14,10 +14,7 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("--lesion-resample", help_text)
         self.assertIn("--lesion-split", help_text)
         self.assertIn("--lesion-split-label", help_text)
-        self.assertIn("--lesion-split-primary-desc", help_text)
         self.assertIn("--lesion-config", help_text)
-        self.assertIn("--target-read-only", help_text)
-        self.assertIn("--no-target-read-only", help_text)
         self.assertIn("--figure-dir", help_text)
         self.assertIn("--lesion-source-subdir", help_text)
         self.assertIn("--lesion-pattern", help_text)
@@ -29,6 +26,10 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("--fmap-dwi-pattern", help_text)
         self.assertIn("bundled template", help_text)
         self.assertIn("source_dir", help_text)
+        self.assertIn("--missing-json-fields", help_text)
+        self.assertIn("--skip-missing-json-defaults", help_text)
+        self.assertIn("--drop-json-fields", help_text)
+        self.assertIn("--overwrite", help_text)
 
     def test_intendedfor_flags_are_mutually_exclusive(self) -> None:
         parser = build_parser()
@@ -104,10 +105,6 @@ class CliHelpTests(unittest.TestCase):
         ])
         self.assertEqual(args.lesion_split_label, [([1, 2, 3], "core")])
 
-    def test_target_read_only_defaults_to_true(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args(["/tmp/in", "/tmp/out"])
-        self.assertTrue(args.target_read_only)
 
     def test_lesion_config_json_is_parsed(self) -> None:
         parser = build_parser()
@@ -123,5 +120,4 @@ class CliHelpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 

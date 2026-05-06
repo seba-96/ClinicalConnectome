@@ -354,7 +354,7 @@ class LesionMaskPlacementTests(unittest.TestCase):
             self.assertTrue(necrosis.exists())
             self.assertTrue(combined.exists())
 
-    def test_t1w_split_keeps_one_primary_mask_in_anat_and_duplicates_it_in_derivatives(self) -> None:
+    def test_t1w_split_keeps_all_masks_in_anat(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:
             src = Path(src_tmp)
             dst = Path(dst_tmp) / "out"
@@ -376,7 +376,6 @@ class LesionMaskPlacementTests(unittest.TestCase):
                 lesion_space="T1w",
                 lesion_split=True,
                 lesion_split_labels={1: "core", 2: "edema"},
-                lesion_split_primary_desc="core",
             )
 
             anat_core = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-core_lesion_roi.nii.gz"
@@ -385,20 +384,17 @@ class LesionMaskPlacementTests(unittest.TestCase):
             deriv_edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-edema_label-lesion_mask.nii.gz"
 
             self.assertTrue(anat_core.exists())
-            self.assertFalse(anat_edema.exists())
-            self.assertTrue(deriv_core.exists())
-            self.assertTrue(deriv_edema.exists())
+            self.assertTrue(anat_edema.exists())
+            self.assertFalse(deriv_core.exists())
+            self.assertFalse(deriv_edema.exists())
 
             t1w_img = nib.load(str(dst / "sub-0001" / "anat" / "sub-0001_T1w.nii.gz"))
             anat_core_img = nib.load(str(anat_core))
-            deriv_core_img = nib.load(str(deriv_core))
-            deriv_edema_img = nib.load(str(deriv_edema))
             self.assertEqual(anat_core_img.shape[:3], t1w_img.shape[:3])
-            self.assertEqual(deriv_core_img.shape[:3], t1w_img.shape[:3])
-            self.assertEqual(deriv_edema_img.shape[:3], t1w_img.shape[:3])
+            anat_edema_img = nib.load(str(anat_edema))
+            self.assertEqual(anat_edema_img.shape[:3], t1w_img.shape[:3])
             self.assertTrue(np.allclose(anat_core_img.affine, t1w_img.affine))
-            self.assertTrue(np.allclose(deriv_core_img.affine, t1w_img.affine))
-            self.assertTrue(np.allclose(deriv_edema_img.affine, t1w_img.affine))
+            self.assertTrue(np.allclose(anat_edema_img.affine, t1w_img.affine))
 
     def test_per_lesion_config_supports_different_spaces(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:
@@ -428,25 +424,6 @@ class LesionMaskPlacementTests(unittest.TestCase):
             mni_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin2009cAsym_label-lesion_mask.nii.gz"
             self.assertTrue(flair_mask.exists())
             self.assertTrue(mni_mask.exists())
-
-    def test_target_can_be_marked_read_only(self) -> None:
-        with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:
-            src = Path(src_tmp)
-            dst = Path(dst_tmp) / "out"
-            img = src / "sub-0001" / "anat" / "sub-0001_T1w.nii.gz"
-            img.parent.mkdir(parents=True)
-            self._write_nifti(img, shape=(4, 4, 4), voxel_size=(1.0, 1.0, 1.0))
-
-            result = create_bids_ready_tree(
-                source_dir=src,
-                target_dir=dst,
-                overwrite=True,
-                make_target_read_only=True,
-            )
-
-            mode = dst.stat().st_mode
-            self.assertEqual(stat.S_IMODE(mode), 0o555)
-            self.assertGreater(result["read_only_paths"], 0)
 
     def test_existing_target_dir_is_removed_before_conversion(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:

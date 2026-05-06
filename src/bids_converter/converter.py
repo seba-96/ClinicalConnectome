@@ -134,7 +134,6 @@ class LesionConfig:
     split: bool = False
     split_labels: list[tuple[tuple[int, ...], str]] | None = None
     combined_desc: str | None = None
-    primary_desc: str | None = None
 
 
 def get_bundled_missing_json_fields_file() -> Path:
@@ -757,7 +756,6 @@ def _resolve_lesion_configs(
     lesion_split: bool,
     lesion_split_labels: dict[Any, Any] | list[tuple[list[int], str]] | list[tuple[tuple[int, ...], str]] | None,
     lesion_split_combined_desc: str | None,
-    lesion_split_primary_desc: str | None,
 ) -> list[LesionConfig]:
     resolved = []
     
@@ -784,9 +782,10 @@ def _resolve_lesion_configs(
             combined_desc = payload.get("combined_desc")
             if combined_desc is not None:
                 combined_desc = _safe_descriptor_token(str(combined_desc))
-            primary_desc = payload.get("primary_desc")
-            if primary_desc is not None:
-                primary_desc = _safe_descriptor_token(str(primary_desc))
+            if payload.get("primary_desc") is not None:
+                warnings.warn(
+                    "lesion config 'primary_desc' is ignored; only MNI lesions are placed in derivatives."
+                )
 
             resolved.append(
                 LesionConfig(
@@ -797,7 +796,6 @@ def _resolve_lesion_configs(
                     split=split,
                     split_labels=split_labels,
                     combined_desc=combined_desc,
-                    primary_desc=primary_desc,
                 )
             )
         return resolved
@@ -816,7 +814,6 @@ def _resolve_lesion_configs(
                 split=lesion_split,
                 split_labels=_normalize_split_label_map(lesion_split_labels),
                 combined_desc=_safe_descriptor_token(lesion_split_combined_desc) if lesion_split_combined_desc else None,
-                primary_desc=_safe_descriptor_token(lesion_split_primary_desc) if lesion_split_primary_desc else None,
             )
         )
         
@@ -829,7 +826,6 @@ def _lesion_destination_relative_path(
     lesion_space: str,
     multiple_for_subject: bool = False,
     desc_label: str | None = None,
-    force_derivatives: bool = False,
 ) -> Path:
     subject = _extract_subject_label(transformed_rel_path) or _extract_subject_label(source_rel_path)
     if subject is None:
@@ -846,7 +842,7 @@ def _lesion_destination_relative_path(
     elif multiple_for_subject:
         desc_entity = f"_desc-{_safe_descriptor_token(source_rel_path.name)}"
 
-    if "mni" not in normalized_space.lower() and not force_derivatives:
+    if "mni" not in normalized_space.lower():
         filename = f"{subject}_space-{normalized_space}{desc_entity}_lesion_roi{suffix}"
         return Path(subject) / "anat" / filename
 
@@ -2028,7 +2024,6 @@ def create_bids_ready_tree(
     lesion_split: bool = False,
     lesion_split_labels: dict[Any, Any] | list[tuple[list[int], str]] | list[tuple[tuple[int, ...], str]] | None = None,
     lesion_split_combined_desc: str | None = None,
-    lesion_split_primary_desc: str | None = None,
     figure_dir: Path | None = None,
     fmap_fmri_patterns: list[str] | None = None,
     fmap_dwi_patterns: list[str] | None = None,
@@ -2059,7 +2054,6 @@ def create_bids_ready_tree(
         lesion_split=lesion_split,
         lesion_split_labels=lesion_split_labels,
         lesion_split_combined_desc=lesion_split_combined_desc,
-        lesion_split_primary_desc=lesion_split_primary_desc,
     )
 
     detected_lesion_paths = set(_find_lesion_files(source_dir))
@@ -2211,71 +2205,27 @@ def create_bids_ready_tree(
                     multiple_for_subject=multiple_for_subject,
                 )
 
-                primary_desc = lesion_config.primary_desc
-                if lesion_config.space.strip().lower() == "t1w":
-                    if not primary_desc:
-                        raise ValueError(
-                            "When using split lesions in T1w space, specify a primary desc label "
-                            "(lesion_split_primary_desc or lesion_config primary_desc)."
-                        )
-
                 written_paths: list[tuple[Path, bool]] = []
                 for split_desc, mask_data, source_image in split_outputs:
-                    output_rel_paths: list[tuple[Path, bool]] = []
-                    if lesion_config.space.strip().lower() == "t1w" and split_desc == primary_desc:
-                        anat_rel = _lesion_destination_relative_path(
-                            source_rel_path=rel_path,
-                            transformed_rel_path=transformed_rel_path,
-                            lesion_space=lesion_config.space,
-                            multiple_for_subject=multiple_for_subject,
-                            desc_label=split_desc,
-                        )
-                        derivatives_rel = _lesion_destination_relative_path(
-                            source_rel_path=rel_path,
-                            transformed_rel_path=transformed_rel_path,
-                            lesion_space=lesion_config.space,
-                            multiple_for_subject=multiple_for_subject,
-                            desc_label=split_desc,
-                            force_derivatives=True,
-                        )
-                        output_rel_paths.extend([(anat_rel, True), (derivatives_rel, True)])
-                    elif lesion_config.space.strip().lower() == "t1w":
-                        derivatives_rel = _lesion_destination_relative_path(
-                            source_rel_path=rel_path,
-                            transformed_rel_path=transformed_rel_path,
-                            lesion_space=lesion_config.space,
-                            multiple_for_subject=multiple_for_subject,
-                            desc_label=split_desc,
-                            force_derivatives=True,
-                        )
-                        output_rel_paths.append((derivatives_rel, True))
-                    else:
-                        output_rel_paths.append(
-                            (
-                                _lesion_destination_relative_path(
-                                    source_rel_path=rel_path,
-                                    transformed_rel_path=transformed_rel_path,
-                                    lesion_space=lesion_config.space,
-                                    multiple_for_subject=multiple_for_subject,
-                                    desc_label=split_desc,
-                                ),
-                                True,
-                            )
-                        )
+                    split_rel_path = _lesion_destination_relative_path(
+                        source_rel_path=rel_path,
+                        transformed_rel_path=transformed_rel_path,
+                        lesion_space=lesion_config.space,
+                        multiple_for_subject=multiple_for_subject,
+                        desc_label=split_desc,
+                    )
+                    split_dst_path = target_dir / split_rel_path
+                    if split_dst_path in emitted_paths:
+                        raise FileExistsError(f"Multiple source files map to the same target path: {split_dst_path}")
+                    emitted_paths.add(split_dst_path)
 
-                    for split_rel_path, track_for_postproc in output_rel_paths:
-                        split_dst_path = target_dir / split_rel_path
-                        if split_dst_path in emitted_paths:
-                            raise FileExistsError(f"Multiple source files map to the same target path: {split_dst_path}")
-                        emitted_paths.add(split_dst_path)
+                    if split_dst_path.exists() or split_dst_path.is_symlink():
+                        if not overwrite:
+                            raise FileExistsError(f"Path already exists in target: {split_dst_path}")
+                        _remove_path(split_dst_path)
 
-                        if split_dst_path.exists() or split_dst_path.is_symlink():
-                            if not overwrite:
-                                raise FileExistsError(f"Path already exists in target: {split_dst_path}")
-                            _remove_path(split_dst_path)
-
-                        _save_binary_mask_like(source_image, mask_data, split_dst_path)
-                        written_paths.append((split_rel_path, track_for_postproc))
+                    _save_binary_mask_like(source_image, mask_data, split_dst_path)
+                    written_paths.append((split_rel_path, True))
 
                 for split_rel_path, track_for_postproc in written_paths:
                     if track_for_postproc:
@@ -2467,8 +2417,6 @@ def create_bids_ready_tree(
         stats["overlay_figures"] = overlay_figures
         stats["subject_html_pages"] = _write_subject_figure_html_pages(resolved_figure_dir)
 
-    if make_target_read_only:
-        stats["read_only_paths"] = _set_tree_read_only(target_dir)
 
     return stats
 
