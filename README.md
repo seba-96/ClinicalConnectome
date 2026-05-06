@@ -75,7 +75,6 @@ bids-converter /path/to/source /path/to/output --lesion-space T1w
 **Lesion destination rules:**
 - `--lesion-space T1w`: place masks in `sub-*/anat/` as `sub-XXX_space-T1w_lesion_roi.nii.gz`
 - `--lesion-space MNI152NLin2009cAsym` (or any other MNI version): place masks in `derivatives/manual_masks/sub-XXX/anat/`. Even if the source file is located in an `anat/` source subfolder, specifying MNI bounds it to derivatives automatically.
-- Other native spaces place masks in `sub-*/anat/` like T1w.
 
 If you have multiple lesion files in different spaces, specify one `--lesion-config` per pattern. Example with one T1w mask and one MNI mask:
 
