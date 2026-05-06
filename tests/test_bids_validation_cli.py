@@ -16,7 +16,7 @@ class BidsValidationCliTests(unittest.TestCase):
             patch(
                 "bids_converter.cli.subprocess.run",
                 return_value=subprocess.CompletedProcess(
-                    args=["bids-validator-deno", "/tmp/out"],
+                    args=["bids-validator", "/tmp/out"],
                     returncode=0,
                 ),
             ) as run_mock,
@@ -28,10 +28,10 @@ class BidsValidationCliTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertIn("bids_validation", payload)
         self.assertEqual(payload["bids_validation"]["returncode"], 0)
-        self.assertEqual(payload["bids_validation"]["command"], ["bids-validator-deno", "/tmp/out"])
+        self.assertEqual(payload["bids_validation"]["command"], ["bids-validator", "/tmp/out"])
         self.assertEqual(sorted(payload["bids_validation"].keys()), ["command", "returncode"])
         run_mock.assert_called_once_with(
-            ["bids-validator-deno", "/tmp/out"],
+            ["bids-validator", "/tmp/out"],
             check=False,
         )
 
@@ -41,7 +41,7 @@ class BidsValidationCliTests(unittest.TestCase):
             patch(
                 "bids_converter.cli.subprocess.run",
                 return_value=subprocess.CompletedProcess(
-                    args=["bids-validator-deno", "/tmp/out"],
+                    args=["bids-validator", "/tmp/out"],
                     returncode=2,
                 ),
             ),
@@ -70,14 +70,17 @@ class BidsValidationCliTests(unittest.TestCase):
     def test_validation_reports_missing_executable(self) -> None:
         with (
             patch("bids_converter.cli.create_bids_ready_tree", return_value={"dirs": 0}),
-            patch("bids_converter.cli.subprocess.run", side_effect=FileNotFoundError()),
+            patch(
+                "bids_converter.cli.subprocess.run",
+                side_effect=[FileNotFoundError(), FileNotFoundError()],
+            ),
             patch("sys.argv", ["bids-converter", "/tmp/in", "/tmp/out"]),
             patch("sys.stdout", new_callable=io.StringIO),
         ):
             with self.assertRaises(RuntimeError) as exc:
                 main()
 
-        self.assertIn("bids-validator-deno", str(exc.exception))
+        self.assertIn("bids-validator", str(exc.exception))
 
 
 if __name__ == "__main__":

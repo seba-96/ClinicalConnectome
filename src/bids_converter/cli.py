@@ -65,16 +65,27 @@ def _parse_json_dict(value: str) -> dict[str, Any]:
 
 
 def _run_bids_validator(target_dir: Path) -> dict[str, object]:
-    command = ["bids-validator-deno", str(target_dir)]
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "Could not run bids-validator-deno. Install the dependency and ensure the executable is on PATH."
-        ) from exc
+    commands = [
+        ["bids-validator", str(target_dir)],
+        ["bids-validator-deno", str(target_dir)],
+    ]
+    last_error: Exception | None = None
+    for command in commands:
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+            )
+            return {
+                "command": command,
+                "returncode": completed.returncode,
+            }
+        except FileNotFoundError as exc:
+            last_error = exc
+
+    raise RuntimeError(
+        "Could not run bids-validator or bids-validator-deno. Install the dependency and ensure the executable is on PATH."
+    ) from last_error
 
     return {
         "command": command,
@@ -206,13 +217,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--validate-bids",
         dest="validate_bids",
         action="store_true",
-        help="Run bids-validator-deno against the generated target directory after conversion (default).",
+        help="Run bids-validator (or bids-validator-deno) against the generated target directory after conversion (default).",
     )
     parser.add_argument(
         "--no-validate-bids",
         dest="validate_bids",
         action="store_false",
-        help="Skip bids-validator-deno validation after conversion.",
+        help="Skip bids-validator validation after conversion.",
     )
     parser.add_argument(
         "--lesion-space",
