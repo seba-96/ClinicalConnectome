@@ -137,6 +137,11 @@ The above command skips conversion and directly targets `*.json` sidecars in you
 
 You can also restrict JSON injection to a given list of subjects (using `--inject-subjects sub-01 sub-02` or `--inject-subjects all`), and you can choose to remove fields using `--drop-json-fields Field1 Field2` dynamically during the injection.
 
+To only test whether the generated dataset is BIDS-compliant simply run:
+
+```bash
+bids-validator-deno /path/to/existing_bids_output
+```
 
 ## Participant ID provenance
 
