@@ -34,6 +34,7 @@ DEFAULT_FILENAME_SUBSTITUTIONS: list[tuple[str, str]] = [
     (r"fMRI_rest_AP", r"dir-AP_epi"),  # fmri fmap
     (r"fMRI_rest_(run-[0-9]+)", r"task-rest_\1_bold"),
     (r"fMRI_rest_run([0-9]+)", r"task-rest_run-\1_bold"),
+    (r"fMRI_rest_run", r"task-rest_bold"),
     (r"fMRI_rest", r"task-rest_bold"),
     (r"Flair", "FLAIR"),
     (r"lesion", "lesion_roi"),
@@ -110,6 +111,19 @@ NON_SUBJECT_ENTITY_PREFIXES = (
 )
 GLOB_WILDCARD_CHARS = "*?[]"
 
+ADULT_MNI_TEMPLATES = [
+    "MNI152Lin",
+    "MNI152NLin2009aAsym",
+    "MNI152NLin2009aSym",
+    "MNI152NLin2009bAsym",
+    "MNI152NLin2009bSym",
+    "MNI152NLin2009cAsym",
+    "MNI152NLin2009cSym",
+    "MNI152NLin6Asym",
+    "MNI152NLin6Sym",
+    "MNI305",
+    "MNIColin27"
+]
 
 @dataclass(frozen=True)
 class LesionConfig:
@@ -243,14 +257,32 @@ def _matching_range_missing_fields(relative_paths: list[str], missing_rules: dic
     return merged
 
 
-def inject_missing_json_in_place(target_dir: Path, missing_json_fields: dict[str, dict[str, Any]]) -> dict[str, int]:
+def inject_missing_json_in_place(
+    target_dir: Path, 
+    missing_json_fields: dict[str, dict[str, Any]],
+    subjects: list[str] | None = None,
+    drop_json_fields: list[str] | None = None,
+) -> dict[str, int]:
     target_dir = target_dir.expanduser().resolve()
     if not target_dir.is_dir():
         raise NotADirectoryError(f"Target directory does not exist: {target_dir}")
 
-    stats = {"json_files_updated": 0, "keys_added": 0}
+    stats = {"json_files_updated": 0, "keys_added": 0, "keys_dropped": 0}
+    
+    # We will track which missing_json_fields rules actually matched any file.
+    # missing_json_fields structure:
+    # 1. "pattern": { "key": "value" }
+    # 2. "1-99": { "pattern": { "key": "value" } }
+    matched_rules: set[str] = set()
+
     for json_path in sorted(target_dir.rglob("*.json")):
         rel_path = json_path.relative_to(target_dir)
+        
+        if subjects and "all" not in [s.lower() for s in subjects]:
+            subj = _extract_subject_label(rel_path)
+            if subj not in subjects and (f"sub-{subj}" if subj and not subj.startswith("sub-") else subj) not in subjects:
+                continue
+
         try:
             payload = json.loads(json_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -259,22 +291,76 @@ def inject_missing_json_in_place(target_dir: Path, missing_json_fields: dict[str
         if not isinstance(payload, dict):
             continue
 
-        defaults = _matching_missing_fields(rel_path.as_posix(), missing_json_fields)
-        defaults.update(_matching_range_missing_fields([rel_path.as_posix()], missing_json_fields))
+        defaults = {}
+        # Track regular pattern rules
+        for pattern, fields in missing_json_fields.items():
+            if not isinstance(fields, dict):
+                continue
+            if _parse_subject_id_range(pattern) is not None:
+                continue # Range rule handled below
+            if fnmatch.fnmatch(rel_path.as_posix(), pattern):
+                defaults.update(fields)
+                matched_rules.add(pattern)
 
+        # Track range rules
+        subject_id = _extract_subject_numeric_id([rel_path.as_posix()])
+        if subject_id is not None:
+            for rule_key, modality_rules in missing_json_fields.items():
+                parsed_range = _parse_subject_id_range(rule_key)
+                if parsed_range is None or not isinstance(modality_rules, dict):
+                    continue
+                start, end = parsed_range
+                if not (start <= subject_id <= end):
+                    continue
+
+                for modality_pattern, fields in modality_rules.items():
+                    if not isinstance(fields, dict):
+                        continue
+                    modality_pattern_str = str(modality_pattern)
+                    if _matches_modality_rule(rel_path.as_posix(), modality_pattern_str):
+                        defaults.update(fields)
+                        matched_rules.add(f"{rule_key} -> {modality_pattern_str}")
+
+        changed = False
         added = 0
+        dropped = 0
         for key, value in defaults.items():
             if key not in payload:
                 payload[key] = value
                 added += 1
+                changed = True
+        
+        if drop_json_fields:
+            for field in drop_json_fields:
+                if field in payload:
+                    del payload[field]
+                    dropped += 1
+                    changed = True
 
-        if added > 0:
+        if changed:
             json_path.write_text(
                 json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
                 encoding="utf-8",
             )
             stats["json_files_updated"] += 1
             stats["keys_added"] += added
+            if "keys_dropped" in stats:
+                stats["keys_dropped"] += dropped
+            else:
+                stats["keys_dropped"] = dropped
+
+    # Warn if any rules didn't match anything
+    for rule_key, rules in missing_json_fields.items():
+        parsed_range = _parse_subject_id_range(rule_key)
+        if parsed_range is None:
+            if isinstance(rules, dict) and rule_key not in matched_rules:
+                warnings.warn(f"JSON injection rule pattern '{rule_key}' did not match any file.")
+        else:
+            if isinstance(rules, dict):
+                for modality_pattern in rules.keys():
+                    combined_key = f"{rule_key} -> {modality_pattern}"
+                    if combined_key not in matched_rules:
+                        warnings.warn(f"JSON injection rule range '{rule_key}' with pattern '{modality_pattern}' did not match any file in range.")
 
     return stats
 
@@ -452,7 +538,7 @@ def _copy_top_level_bids_files(
     return stats
 
 
-def _sync_participants_json_with_tsv(target_root: Path) -> bool:
+def _sync_participants_json_with_tsv(target_root: Path, reference_root: Path | None = None) -> bool:
     participants_tsv = target_root / "participants.tsv"
     participants_json = target_root / "participants.json"
 
@@ -466,32 +552,31 @@ def _sync_participants_json_with_tsv(target_root: Path) -> bool:
     if not fields:
         return False
 
+    template_payload: dict[str, Any] = {}
+    resolved_reference_root = reference_root
+    if resolved_reference_root is None and BUNDLED_REFERENCE_BIDS_ROOT.is_dir():
+        resolved_reference_root = BUNDLED_REFERENCE_BIDS_ROOT
+
+    if resolved_reference_root is not None:
+        reference_json = resolved_reference_root / "participants.json"
+        if reference_json.exists():
+            loaded = json.loads(reference_json.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                template_payload = loaded
+
     payload: dict[str, Any] = {}
-    if participants_json.exists():
-        loaded = json.loads(participants_json.read_text(encoding="utf-8"))
-        if isinstance(loaded, dict):
-            payload = loaded
-
-    changed = False
     for field in fields:
-        entry = payload.get(field)
-        if not isinstance(entry, dict):
-            payload[field] = {"Description": "(TODO: add description)"}
-            changed = True
-            continue
-        if "Description" not in entry:
-            entry["Description"] = "(TODO: add description)"
+        entry = template_payload.get(field)
+        if isinstance(entry, dict):
             payload[field] = entry
-            changed = True
+        else:
+            payload[field] = {"Description": "(TODO: add description)"}
 
-    if changed or not participants_json.exists():
-        participants_json.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
-            encoding="utf-8",
-        )
-        return True
-
-    return False
+    participants_json.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
+    return True
 
 
 def _ensure_bidsignore(target_root: Path, patterns: list[str]) -> bool:
@@ -674,14 +759,17 @@ def _resolve_lesion_configs(
     lesion_split_combined_desc: str | None,
     lesion_split_primary_desc: str | None,
 ) -> list[LesionConfig]:
+    resolved = []
+    
     if lesion_configs:
-        resolved: list[LesionConfig] = []
         for index, payload in enumerate(lesion_configs):
             if not isinstance(payload, dict):
                 raise TypeError(f"lesion_configs[{index}] must be a dict")
             space = str(payload.get("space", "")).strip()
             if not space:
                 raise ValueError(f"lesion_configs[{index}] requires non-empty 'space'")
+            if "mni" in space.lower() and space not in ADULT_MNI_TEMPLATES:
+                raise ValueError(f"MNI space '{space}' is not a valid BIDS template. Allowed: {', '.join(ADULT_MNI_TEMPLATES)}")
 
             source_subdir = payload.get("source_subdir")
             pattern = payload.get("pattern")
@@ -714,21 +802,25 @@ def _resolve_lesion_configs(
             )
         return resolved
 
-    if lesion_space is None:
-        return []
-
-    return [
-        LesionConfig(
-            space=lesion_space,
-            source_subdir=lesion_source_subdir,
-            pattern=lesion_pattern,
-            resample=lesion_resample,
-            split=lesion_split,
-            split_labels=_normalize_split_label_map(lesion_split_labels),
-            combined_desc=_safe_descriptor_token(lesion_split_combined_desc) if lesion_split_combined_desc else None,
-            primary_desc=_safe_descriptor_token(lesion_split_primary_desc) if lesion_split_primary_desc else None,
+    if lesion_space is not None:
+        if not lesion_space.strip():
+            raise ValueError("lesion_space cannot be empty")
+        if "mni" in lesion_space.lower() and lesion_space not in ADULT_MNI_TEMPLATES:
+            raise ValueError(f"MNI space '{lesion_space}' is not a valid BIDS template. Allowed: {', '.join(ADULT_MNI_TEMPLATES)}")
+        resolved.append(
+            LesionConfig(
+                space=lesion_space,
+                source_subdir=lesion_source_subdir,
+                pattern=lesion_pattern,
+                resample=lesion_resample,
+                split=lesion_split,
+                split_labels=_normalize_split_label_map(lesion_split_labels),
+                combined_desc=_safe_descriptor_token(lesion_split_combined_desc) if lesion_split_combined_desc else None,
+                primary_desc=_safe_descriptor_token(lesion_split_primary_desc) if lesion_split_primary_desc else None,
+            )
         )
-    ]
+        
+    return resolved
 
 
 def _lesion_destination_relative_path(
@@ -1269,7 +1361,15 @@ def _find_matching_t1w_scan(target_dir: Path, lesion_rel_path: Path) -> Path | N
             continue
         candidates.append(candidate)
 
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None
+
+    # Prefer scans without 'ce-' entity (e.g., ce-gadolinium).
+    non_ce_candidates = [c for c in candidates if _extract_bids_entity(c.relative_to(target_dir), "ce-") is None]
+    if non_ce_candidates:
+        return non_ce_candidates[0]
+
+    return candidates[0]
 
 
 def _needs_resample(moving_img: nib.spatialimages.SpatialImage, reference_img: nib.spatialimages.SpatialImage) -> bool:
@@ -1776,6 +1876,8 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
         "resolution_x",
         "resolution_y",
         "resolution_z",
+        "orientation",
+        "voxels_num",
         "acquisition_plan",
         "vol_num",
         "bvecs_num",
@@ -1842,7 +1944,9 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
             "resolution_x": res_x,
             "resolution_y": res_y,
             "resolution_z": res_z,
-            "acquisition_plan": "",
+            "orientation": "",
+            "voxels_num": "",
+            "acquisition_plan": str(sidecar_payload.get("MRAcquisitionType", "")),
             "vol_num": "",
             "bvecs_num": "",
             "bval": "",
@@ -1850,13 +1954,17 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
 
         axcodes = nib.aff2axcodes(image.affine)
         if len(axcodes) >= 3:
-            z_ax = axcodes[2]
-            if z_ax in ('I', 'S'):
-                row["acquisition_plan"] = "Axial"
-            elif z_ax in ('L', 'R'):
-                row["acquisition_plan"] = "Sagittal"
-            elif z_ax in ('A', 'P'):
-                row["acquisition_plan"] = "Coronal"
+            row["orientation"] = "".join(axcodes[:3])
+            row["voxels_num"] = "; ".join(str(int(value)) for value in image.shape[:3])
+
+            if not row["acquisition_plan"]:
+                z_ax = axcodes[2]
+                if z_ax in ("I", "S"):
+                    row["acquisition_plan"] = "Axial"
+                elif z_ax in ("L", "R"):
+                    row["acquisition_plan"] = "Sagittal"
+                elif z_ax in ("A", "P"):
+                    row["acquisition_plan"] = "Coronal"
 
         tesla_value = _coerce_float(sidecar_payload.get("MagneticFieldStrength"))
         if tesla_value is not None:
@@ -1881,7 +1989,7 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
         bvals = _read_numeric_vector(image_path.with_name(f"{stem}.bval"))
         if bvals:
             unique_values = sorted({int(round(value)) for value in bvals})
-            row["bval"] = ",".join(str(v) for v in unique_values)
+            row["bval"] = "; ".join(str(v) for v in unique_values)
 
         bvec_columns = _read_bvec_columns(image_path.with_name(f"{stem}.bvec"))
         if bvec_columns is not None:
@@ -2306,7 +2414,7 @@ def create_bids_ready_tree(
     if _ensure_bidsignore(target_dir, DEFAULT_BIDSIGNORE_PATTERNS):
         stats["bidsignore_updated"] += 1
 
-    if _sync_participants_json_with_tsv(target_dir):
+    if _sync_participants_json_with_tsv(target_dir, reference_root=resolved_reference_root):
         stats["participants_json_updated"] += 1
 
     stats["illegal_subject_subfolders_removed"] += _cleanup_illegal_subject_subfolders(target_dir)

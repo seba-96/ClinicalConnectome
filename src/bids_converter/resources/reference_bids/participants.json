@@ -1,6 +1,382 @@
 {
   "participant_id": {
     "Description": "Unique participant identifier"
+  },
+  "center_id": {
+    "Description": "Recruiting center identifier",
+    "Levels": {
+      "UNIPD": "University of Padova",
+      "UNIPD-PD": "University of Padova, Parkinson's Disease cohort",
+      "ASUFC": "Azienda Sanitaria Universitaria Friuli Centrale",
+      "UNITO": "University of Turin",
+      "UKE": "Universitätsklinikum Hamburg-Eppendorf",
+      "UKLFR": "Universitätsklinikum Freiburg",
+      "CUB": "Charité - Universitätsmedizin Berlin",
+      "HSR": "San Raffaele Hospital, Milan",
+      "UCL-UK": "University College London",
+      "UCAM": "University of Cambridge",
+      "APHP": "Assistance Publique - Hôpitaux de Paris",
+      "FIDIS": "Health Research Institute of Santiago de Compostela"
+    }
+  },
+  "disease_id": {
+    "Description": "Disease or condition identifier",
+    "Levels": {
+      "ST": "Stroke",
+      "GM": "Glioma",
+      "PD": "Parkinson's Disease",
+      "HC": "Healthy Control"
+    }
+  },
+  "disease_notes": {
+    "Description": "Additional notes on the disease or condition"
+  },
+  "dataset": {
+    "Description": "Dataset identifier or name"
+  },
+  "age": {
+    "Description": "Age of the participant at the time of inclusion",
+    "Units": "years",
+    "MinimumValue": 0,
+    "MaximumValue": 140
+  },
+  "sex": {
+    "Description": "Biological sex of the participant",
+    "Levels": {
+      "M": "Male",
+      "F": "Female"
+    }
+  },
+  "handedness": {
+    "Description": "Dominant hand of the participant",
+    "Levels": {
+      "left": "Left-handed",
+      "right": "Right-handed",
+      "ambidextrous": "Ambidextrous"
+    }
+  },
+  "education": {
+    "Description": "Years of formal education",
+    "Units": "years",
+    "MinimumValue": 0,
+    "MaximumValue": 30
+  },
+  "lesion_volume_ml": {
+    "Description": "Volume of the lesion",
+    "Units": "ml"
+  },
+  "core_size_mm3": {
+    "Description": "Size of the lesion core",
+    "Units": "mm3"
+  },
+  "MGMT": {
+    "Description": "MGMT promoter methylation status",
+    "Levels": {
+      "not_methylated": "Not methylated",
+      "methylated": "Methylated",
+      "unmethylated": "Unmethylated"
+    }
+  },
+  "IDH1": {
+    "Description": "IDH1 mutation status",
+    "Levels": {
+      "wild-type": "Wild-type",
+      "mutated": "Mutated"
+    }
+  },
+  "ATRX": {
+    "Description": "ATRX mutation status",
+    "Levels": {
+      "wild-type": "Wild-type",
+      "mutated": "Mutated"
+    }
+  },
+  "ECOG": {
+    "Description": "Eastern Cooperative Oncology Group performance status score"
+  },
+  "death": {
+    "Description": "Whether the participant deceased during the study"
+  },
+  "lesion_side": {
+    "Description": "Lateralization of the lesion",
+    "Levels": {
+      "left": "Left hemisphere",
+      "right": "Right hemisphere",
+      "bilateral": "Bilateral",
+      "unilateral": "Unilateral"
+    }
+  },
+  "lesion_type": {
+    "Description": "Type of brain lesion",
+    "Levels": {
+      "ischemic": "Ischemic lesion",
+      "hemorrhagic": "Hemorrhagic lesion",
+      "other": "Other type of lesion"
+    }
+  },
+  "clinical_date": {
+    "Description": "Date of clinical assessment (ISO 8601 format)"
+  },
+  "NIHSS": {
+    "Description": "National Institutes of Health Stroke Scale total score",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_1A": {
+    "Description": "NIHSS item 1A: Level of consciousness",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_1B": {
+    "Description": "NIHSS item 1B: LOC questions",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_1C": {
+    "Description": "NIHSS item 1C: LOC commands",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_2": {
+    "Description": "NIHSS item 2: Best gaze",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_3": {
+    "Description": "NIHSS item 3: Visual fields",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_4": {
+    "Description": "NIHSS item 4: Facial palsy",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_5A": {
+    "Description": "NIHSS item 5A: Motor arm - left",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_5B": {
+    "Description": "NIHSS item 5B: Motor arm - right",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_6A": {
+    "Description": "NIHSS item 6A: Motor leg - left",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_6B": {
+    "Description": "NIHSS item 6B: Motor leg - right",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_7": {
+    "Description": "NIHSS item 7: Limb ataxia",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_8": {
+    "Description": "NIHSS item 8: Sensory",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_9": {
+    "Description": "NIHSS item 9: Best language",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_10": {
+    "Description": "NIHSS item 10: Dysarthria",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_11": {
+    "Description": "NIHSS item 11: Extinction and inattention",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_24H": {
+    "Description": "NIHSS total score at 24 hours",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_at_presentation": {
+    "Description": "NIHSS total score at presentation",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_admission": {
+    "Description": "NIHSS total score at admission",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_3m": {
+    "Description": "NIHSS total score at 3 months follow-up",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_6m": {
+    "Description": "NIHSS total score at 6 months follow-up",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_12m": {
+    "Description": "NIHSS total score at 12 months follow-up",
+    "MinimumValue": 0,
+    "MaximumValue": 42
+  },
+  "NIHSS_1A_3m": {
+    "Description": "NIHSS item 1A: Level of consciousness at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_1B_3m": {
+    "Description": "NIHSS item 1B: LOC questions at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_1C_3m": {
+    "Description": "NIHSS item 1C: LOC commands at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_2_3m": {
+    "Description": "NIHSS item 2: Best gaze at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_3_3m": {
+    "Description": "NIHSS item 3: Visual fields at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_4_3m": {
+    "Description": "NIHSS item 4: Facial palsy at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_5A_3m": {
+    "Description": "NIHSS item 5A: Motor arm - left at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_5B_3m": {
+    "Description": "NIHSS item 5B: Motor arm - right at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_6A_3m": {
+    "Description": "NIHSS item 6A: Motor leg - left at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_6B_3m": {
+    "Description": "NIHSS item 6B: Motor leg - right at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_7_3m": {
+    "Description": "NIHSS item 7: Limb ataxia at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_8_3m": {
+    "Description": "NIHSS item 8: Sensory at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_9_3m": {
+    "Description": "NIHSS item 9: Best language at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_10_3m": {
+    "Description": "NIHSS item 10: Dysarthria at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_11_3m": {
+    "Description": "NIHSS item 11: Extinction and inattention at 3 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_1A_12m": {
+    "Description": "NIHSS item 1A: Level of consciousness at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_1B_12m": {
+    "Description": "NIHSS item 1B: LOC questions at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_1C_12m": {
+    "Description": "NIHSS item 1C: LOC commands at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_2_12m": {
+    "Description": "NIHSS item 2: Best gaze at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_3_12m": {
+    "Description": "NIHSS item 3: Visual fields at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_4_12m": {
+    "Description": "NIHSS item 4: Facial palsy at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_5A_12m": {
+    "Description": "NIHSS item 5A: Motor arm - left at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_5B_12m": {
+    "Description": "NIHSS item 5B: Motor arm - right at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_6A_12m": {
+    "Description": "NIHSS item 6A: Motor leg - left at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_6B_12m": {
+    "Description": "NIHSS item 6B: Motor leg - right at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 4
+  },
+  "NIHSS_7_12m": {
+    "Description": "NIHSS item 7: Limb ataxia at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_8_12m": {
+    "Description": "NIHSS item 8: Sensory at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_9_12m": {
+    "Description": "NIHSS item 9: Best language at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 3
+  },
+  "NIHSS_10_12m": {
+    "Description": "NIHSS item 10: Dysarthria at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
+  },
+  "NIHSS_11_12m": {
+    "Description": "NIHSS item 11: Extinction and inattention at 12 months",
+    "MinimumValue": 0,
+    "MaximumValue": 2
   }
 }
+
 

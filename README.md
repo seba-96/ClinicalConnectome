@@ -2,26 +2,6 @@
 
 A CLI utility designed to transform neuroimaging data organized according to the EBRAINS 2.4 Data Management Plan into fully compliant BIDS (Brain Imaging Data Structure) folder structures.
 
-## Overview
-
-The `bids-converter` tool automates the tedious parts of dataset conversion and curation by applying:
-
-- structural heuristics for filename/path substitutions
-- subject ID normalization (`sub-` prefix + optional ID collapsing)
-- JSON key renaming and missing default JSON field injection via configs
-- automatic `IntendedFor` population in `fmap/*.json` from discovered BOLD/DWI scans
-- advanced lesion mask handling with `--lesion-space` routing
-- bundled copying of top-level reference BIDS metadata
-- data provenance preservation (original DMP participant IDs in `participant_id_dmp` column)
-- immediately makes output trees read-only (to stop accidental mutation)
-- automatic generation of montage figures via `nilearn` (if requested via `--figure-dir`)
-- immediate BIDS compliance validation with `bids-validator-deno`
-
-The repository already includes:
-
-- a bundled reference BIDS top-level template in `src/bids_converter/resources/reference_bids/`
-- a bundled default missing-fields JSON configuration in `src/bids_converter/resources/missing_json_fields.json`
-
 ## Where and how to run
 
 This package can be run **locally** on your computer terminal, or on a **PHI. 
@@ -99,7 +79,7 @@ If you have an **already converted BIDS dataset** and simply want to retroactive
 ```bash
 bids-converter /path/to/existing_bids_output \
   --inject-missing-json-only \
-  --missing-json-fields '{"0001-0100": {"FLAIR": {"TaskName": "rest"}}}'
+  --missing-json-fields '{"0001-0100": {"*func*": {"TaskName": "rest"}}}''
 ```
 
 The above command skips conversion and directly targets `*.json` sidecars in your existing `/path/to/existing_bids_output` dataset.
@@ -135,7 +115,7 @@ If multiple lesion files are detected for the same subject, specify one selector
 bids-converter /path/to/source /path/to/output --lesion-space MNI152NLin2009cAsym --lesion-source-subdir manual_masks
 ```
 
-`--lesion-resample` safely resamples a mask over to the matching specified space.
+`--lesion-resample` resamples a mask over to the matching specified space. Defaults to `False`. (In case multiple T1w images are present for the given subject, the first one alphabetically is selected as the resampling reference).
 
 ### Splitting multi-label discrete lesion masks
 
@@ -176,3 +156,8 @@ When IDs are normalized, the original DMP ID is preserved in an additional `part
 - `main.py`: compatibility launcher (`python main.py ...`)
 - `tests/`: comprehensive regression tests checking affine compliance, plots, overlapping mask derivation, etc.
 
+## API Documentation
+
+The JSON field mapping tool (either `--missing-json-fields-file` or `--missing-json-fields`) allows missing elements to be seamlessly patched to BIDS metadata iteratively.
+
+You can also restrict JSON injection to a given list of subjects (using `--inject-subjects sub-01 sub-02` or `--inject-subjects all`), and you can choose to remove fields using `--drop-json-fields Field1 Field2` dynamically during the injection.

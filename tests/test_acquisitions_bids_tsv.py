@@ -56,6 +56,8 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
             self.assertEqual(row["resolution_x"], "2.0")
             self.assertEqual(row["time_repetition"], "2.0")
             self.assertEqual(row["total_length_minutes"], "4.0")
+            self.assertEqual(row["orientation"], "RAS")
+            self.assertEqual(row["voxels_num"], "4; 4; 4")
             self.assertEqual(row["manufacturer"], "Siemens")
             self.assertEqual(row["machine"], "Prisma")
             self.assertEqual(row["tesla_field"], "3.0")
@@ -100,8 +102,10 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
             for row in rows:
                 self.assertEqual(row["modality"], "dwi")
                 self.assertNotIn("dwi_number_of_runs", row)
-                self.assertEqual(row["bval"], "0,1000,2000")
+                self.assertEqual(row["bval"], "0; 1000; 2000")
                 self.assertEqual(row["bvecs_num"], "5")
+                self.assertEqual(row["orientation"], "RAS")
+                self.assertEqual(row["voxels_num"], "3; 3; 3")
                 self.assertEqual(row["manufacturer"], "GE")
                 self.assertEqual(row["machine"], "SIGNA")
                 self.assertEqual(row["tesla_field"], "1.5")
@@ -132,9 +136,9 @@ class AcquisitionsBidsTsvTests(unittest.TestCase):
                 rows = list(csv.DictReader(f, delimiter="\t"))
 
             self.assertEqual(len(rows), 1)
-        row = rows[0]
-        self.assertEqual(row["bval"], "0,1000,2000")
-        self.assertEqual(row["bvecs_num"], "5")
+            row = rows[0]
+            self.assertEqual(row["bval"], "0; 1000; 2000")
+            self.assertEqual(row["bvecs_num"], "5")
 
     def test_invalid_binary_bval_does_not_crash(self) -> None:
         with tempfile.TemporaryDirectory() as src_tmp, tempfile.TemporaryDirectory() as dst_tmp:

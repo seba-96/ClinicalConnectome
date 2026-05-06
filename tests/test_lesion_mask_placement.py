@@ -279,15 +279,15 @@ class LesionMaskPlacementTests(unittest.TestCase):
                 source_dir=src,
                 target_dir=dst,
                 overwrite=True,
-                lesion_space="MNI",
+                lesion_space="MNI152NLin6Asym",
                 lesion_split=True,
                 lesion_split_labels={1: "core", 2: "edema"},
                 lesion_split_combined_desc="edemacore",
             )
 
-            core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-core_label-lesion_mask.nii.gz"
-            edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-edema_label-lesion_mask.nii.gz"
-            combined = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-edemacore_label-lesion_mask.nii.gz"
+            core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-core_label-lesion_mask.nii.gz"
+            edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-edema_label-lesion_mask.nii.gz"
+            combined = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-edemacore_label-lesion_mask.nii.gz"
 
             self.assertTrue(core.exists())
             self.assertTrue(edema.exists())
@@ -311,13 +311,13 @@ class LesionMaskPlacementTests(unittest.TestCase):
             create_bids_ready_tree(
                 source_dir=src,
                 target_dir=dst,
-                lesion_space="MNI",
+                lesion_space="MNI152NLin6Asym",
                 lesion_split=True,
                 lesion_split_labels={1: "core", 2: "core", 3: "core"},
             )
 
-            core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-core_label-lesion_mask.nii.gz"
-            label4 = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-label4_label-lesion_mask.nii.gz"
+            core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-core_label-lesion_mask.nii.gz"
+            label4 = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-label4_label-lesion_mask.nii.gz"
             self.assertTrue(core.exists())
             self.assertFalse(label4.exists())
 
@@ -338,16 +338,16 @@ class LesionMaskPlacementTests(unittest.TestCase):
             create_bids_ready_tree(
                 source_dir=src,
                 target_dir=dst,
-                lesion_space="MNI",
+                lesion_space="MNI152NLin6Asym",
                 lesion_split=True,
                 lesion_split_labels=[((1, 2, 3), "core"), ((4,), "edema"), ((3,), "necrosis")],
                 lesion_split_combined_desc="edemacore",
             )
 
-            core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-core_label-lesion_mask.nii.gz"
-            edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-edema_label-lesion_mask.nii.gz"
-            necrosis = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-necrosis_label-lesion_mask.nii.gz"
-            combined = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI_desc-edemacore_label-lesion_mask.nii.gz"
+            core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-core_label-lesion_mask.nii.gz"
+            edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-edema_label-lesion_mask.nii.gz"
+            necrosis = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-necrosis_label-lesion_mask.nii.gz"
+            combined = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-MNI152NLin6Asym_desc-edemacore_label-lesion_mask.nii.gz"
 
             self.assertTrue(core.exists())
             self.assertTrue(edema.exists())
