@@ -9,7 +9,7 @@ If you are running it on PHI:
 1. Open a new Desktop in PHI.
 2. Open a `'MULTI'` terminal.
 
-Remember to keep an original copy of you DMP compliant dataset and place the new BIDS compliant dataset in PHI under the directory /Clinical_connectome_bids/<center>/<dataset_id>
+Remember to keep an original copy of you DMP compliant dataset and place the new BIDS compliant dataset in PHI under the directory `/Clinical_connectome_bids/<center>/<dataset_id>'`
 When encountering issues with conversion you can run the bids-converter separately on different sub-groups of the dataset and eventually merge (ie copy) the resulting BIDS compliant sub-datasets together.
 Note that in the latter case acquisitions.tsv files must be merged.
 
@@ -47,7 +47,7 @@ python -m pip install -e .
 First always make sure to activate the virtual environment:
 
 ```bash
-source .venv/bin/activate
+source ClinicalConnectome/.venv/bin/activate
 ```
 
 Then run the converter with the source (DMP dataset) and output paths (BIDS dataset):
@@ -97,18 +97,15 @@ bids-converter /path/to/source /path/to/output \
   --lesion-pattern '*lesion*' \
   --lesion-split \
   --lesion-split-label 1,2,3:core \
-  --lesion-split-label 4:edema \
-  --lesion-split-combined-desc edemacore
+  --lesion-split-label 4:edema 
 ```
-
-When split masks are built for non-MNI spaces, all split outputs are kept in `sub-XXX/anat/`.
 
 For fully customized settings across different source lesion types, specify configurations recursively via JSON:
 
 ```bash
 bids-converter /path/to/source /path/to/output \
   --lesion-config '{"pattern":"*space-FLAIR_les*","space":"FLAIR","resample":true}' \
-  --lesion-config '{"pattern":"*space-MNI*","space":"MNI152NLin2009cAsym","split":true,"split_labels":{"1,2,3":"core","4":"edema"},"combined_desc":"edemacore"}'
+  --lesion-config '{"pattern":"*space-MNI*","space":"MNI152NLin2009cAsym","split":true,"split_labels":{"1,2,3":"core","4":"edema"}}'
 ```
 
 ### Field maps
