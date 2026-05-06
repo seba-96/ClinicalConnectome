@@ -1,0 +1,9 @@
+{
+  "file_to_json_fields": {
+    "0001-9999": {
+      "func": {
+        "TaskName": "rest"
+      }
+    }
+  }
+}

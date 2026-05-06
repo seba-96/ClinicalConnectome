@@ -40,6 +40,14 @@ python -m pip install -e .
 
 ## Quick start
 
+First always make sure to activate the virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+Then run the converter with the source (DMP dataset) and output paths (BIDS dataset):
+
 ```bash
 bids-converter \
   /path/to/source \
