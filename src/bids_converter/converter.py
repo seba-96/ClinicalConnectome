@@ -65,6 +65,8 @@ DEFAULT_TOPLEVEL_COPY = [
 DEFAULT_BIDSIGNORE_PATTERNS = [
     "*lesion_roi.nii.gz",
     "*lesion_roi.json",
+    "*lesion_*roi.nii.gz",
+    "*lesion_*roi.json",
     "acquisitions.tsv",
     "acquisitions_dmp.tsv",
     "**/perf/*_dsc.nii.gz",
@@ -837,14 +839,23 @@ def _lesion_destination_relative_path(
         raise ValueError("lesion_space cannot be empty when lesion files are present")
 
     desc_entity = ""
+    split_suffix = ""
     if desc_label:
-        desc_entity = f"_desc-{_safe_descriptor_token(desc_label)}"
+        safe_label = _safe_descriptor_token(desc_label)
+        if "mni" in normalized_space.lower():
+            desc_entity = f"_desc-{safe_label}"
+        else:
+            split_suffix = f"_lesion_{safe_label}roi"
     elif multiple_for_subject:
         desc_entity = f"_desc-{_safe_descriptor_token(source_rel_path.name)}"
 
     if "mni" not in normalized_space.lower():
-        filename = f"{subject}_space-{normalized_space}{desc_entity}_lesion_roi{suffix}"
-        return Path(subject) / "anat" / filename
+        modality_dir = "dwi" if normalized_space.lower() == "dwi" else "anat"
+        if split_suffix:
+            filename = f"{subject}_space-{normalized_space}{split_suffix}{suffix}"
+        else:
+            filename = f"{subject}_space-{normalized_space}{desc_entity}_lesion_roi{suffix}"
+        return Path(subject) / modality_dir / filename
 
     filename = f"{subject}_space-{normalized_space}{desc_entity}_label-lesion_mask{suffix}"
     return Path("derivatives") / "manual_masks" / subject / "anat" / filename

@@ -1,4 +1,6 @@
 *lesion_roi.nii.gz
 *lesion_roi.json
+*lesion_*roi.nii.gz
+*lesion_*roi.json
 acquisitions.tsv
 

@@ -254,7 +254,7 @@ class LesionMaskPlacementTests(unittest.TestCase):
 
             t1w_mask = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-sub-0001-t1w_label-lesion_mask.nii.gz"
             flair_mask = dst / "sub-0001" / "anat" / "sub-0001_space-FLAIR_desc-sub-0001-flair_lesion_roi.nii.gz"
-            dwi_mask = dst / "sub-0001" / "anat" / "sub-0001_space-dwi_desc-sub-0001-dwi_lesion_roi.nii.gz"
+            dwi_mask = dst / "sub-0001" / "dwi" / "sub-0001_space-dwi_desc-sub-0001-dwi_lesion_roi.nii.gz"
             canonical_flair_mask = dst / "sub-0001" / "anat" / "sub-0001_space-FLAIR_lesion_roi.nii.gz"
 
             self.assertFalse(t1w_mask.exists())
@@ -378,8 +378,8 @@ class LesionMaskPlacementTests(unittest.TestCase):
                 lesion_split_labels={1: "core", 2: "edema"},
             )
 
-            anat_core = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-core_lesion_roi.nii.gz"
-            anat_edema = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-edema_lesion_roi.nii.gz"
+            anat_core = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_lesion_coreroi.nii.gz"
+            anat_edema = dst / "sub-0001" / "anat" / "sub-0001_space-T1w_lesion_edemaroi.nii.gz"
             deriv_core = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-core_label-lesion_mask.nii.gz"
             deriv_edema = dst / "derivatives" / "manual_masks" / "sub-0001" / "anat" / "sub-0001_space-T1w_desc-edema_label-lesion_mask.nii.gz"
 
