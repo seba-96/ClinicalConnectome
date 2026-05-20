@@ -1961,8 +1961,10 @@ def _write_acquisitions_bids_tsv(target_dir: Path) -> int:
 
         axcodes = nib.aff2axcodes(image.affine)
         if len(axcodes) >= 3:
-            row["orientation"] = "".join(axcodes[:3])
             row["voxels_num"] = "; ".join(str(int(value)) for value in image.shape[:3])
+
+            if all(axcodes[:3]):
+                row["orientation"] = "".join(axcodes[:3])
 
             if not row["acquisition_plan"]:
                 z_ax = axcodes[2]
